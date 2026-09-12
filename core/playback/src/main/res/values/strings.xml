@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="hush_playback_channel_name">Playback</string>
+    <string name="hush_playback_channel_description">Controls for the sound Hush is playing.</string>
+</resources>

@@ -16,3 +16,4 @@
 *.jks
 *.keystore
 /app/release
+/.claude/worktrees/
