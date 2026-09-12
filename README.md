@@ -7,9 +7,9 @@ nothing is recorded, bundled, or downloaded, and the app never touches the
 network.
 
 <p align="center">
-  <img src="docs/screenshots/summer-night.png" alt="Summer night scene — Crickets and Stream playing until cancelled" width="46%">
+  <img src="docs/screenshots/home-firefly.png" alt="Crickets and Stream mix, with a glowing firefly companion under the orb" width="46%">
   &nbsp;&nbsp;
-  <img src="docs/screenshots/ocean-timer.png" alt="Ocean and Wind playing with a sleep timer counting down" width="46%">
+  <img src="docs/screenshots/home-frog.png" alt="Thunderstorm and Wind mix, with a little frog companion under the orb" width="46%">
 </p>
 
 ## Highlights
@@ -29,6 +29,9 @@ network.
   pause when headphones unplug), and resume after the process is killed.
 - **A night-sky UI** that tints itself with the sounds in the mix, with one
   quiet breathing animation on the play orb.
+- **A companion animal** rests at the base of the orb and changes with the mix
+  — a frog for rain, a whale for the ocean, a firefly for crickets, a fox by
+  the campfire, and a sleeping cat when all is quiet.
 - Built for **modest hardware** (Android 8.0+): the render loop is
   allocation-free, the UI motion budget is tiny, and the release build is
   R8-shrunk.
