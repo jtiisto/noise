@@ -70,11 +70,14 @@ import dev.jtiisto.noise.ui.components.HushSlider
 import dev.jtiisto.noise.ui.components.SectionHeader
 import dev.jtiisto.noise.ui.components.auroraBackground
 import dev.jtiisto.noise.ui.components.rememberMixPalette
+import dev.jtiisto.noise.ui.critter.Critter
+import dev.jtiisto.noise.ui.critter.critterFor
 import dev.jtiisto.noise.ui.formatCountdown
 import dev.jtiisto.noise.ui.formatPercent
 import dev.jtiisto.noise.ui.remainingMinutes
 import dev.jtiisto.noise.ui.settings.SettingsSheet
 import dev.jtiisto.noise.ui.theme.HushColor
+import dev.jtiisto.noise.ui.theme.HushSize
 import dev.jtiisto.noise.ui.theme.HushSpacing
 import dev.jtiisto.noise.ui.theme.MixPalette
 import dev.jtiisto.noise.ui.theme.PillShape
@@ -175,19 +178,29 @@ fun HomeScreen(
                         }
                     }
 
-                    PlayOrb(
-                        isPlaying = state.isPlaying,
-                        enabled = !mix.isEmpty,
-                        palette = palette,
-                        contentDescription = stringResource(
-                            if (state.isPlaying) R.string.cd_pause else R.string.cd_play,
-                        ),
-                        onClick = {
-                            if (!state.isPlaying) onPlaybackRequested()
-                            actions.onPlayPauseClick()
-                        },
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
+                    // The orb and its little companion share one 200 dp box, so
+                    // the layout is unchanged: the critter is a pure overlay that
+                    // sits at the base of the orb, clear of the play glyph.
+                    Box(Modifier.align(Alignment.CenterHorizontally).size(HushSize.orb)) {
+                        PlayOrb(
+                            isPlaying = state.isPlaying,
+                            enabled = !mix.isEmpty,
+                            palette = palette,
+                            contentDescription = stringResource(
+                                if (state.isPlaying) R.string.cd_pause else R.string.cd_play,
+                            ),
+                            onClick = {
+                                if (!state.isPlaying) onPlaybackRequested()
+                                actions.onPlayPauseClick()
+                            },
+                        )
+                        Critter(
+                            kind = critterFor(mix),
+                            isPlaying = state.isPlaying,
+                            palette = palette,
+                            modifier = Modifier.align(Alignment.BottomCenter),
+                        )
+                    }
 
                     // The orb's box already carries its halo's worth of margin.
                     Spacer(Modifier.height(HushSpacing.sm))

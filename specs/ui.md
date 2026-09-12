@@ -31,8 +31,10 @@
   radius, 999 dp pills.
 - Motion budget: one breathing animation on the play orb (scale 1.0→1.05 and
   glow alpha, 4 s ease-in-out loop, only while playing), tile selection scale
-  spring, animated colour/size for state changes. Nothing else animates
-  continuously.
+  spring, animated colour/size for state changes, and the home critter's slow
+  idle breathe/bob (see **Critter**). The critter is the only continuous
+  animation that also runs while paused, and it is deliberately gentle; nothing
+  else animates continuously.
 
 ## Screens
 ### Home (single screen, vertical scroll)
@@ -79,6 +81,40 @@
    readout, always visible and pinned below the scroll. It sits on a vertical
    scrim that fades from transparent into the night ground so the catalog can
    scroll under it and stay legible (there is no blur available).
+
+### Critter (Home overlay)
+A small, cute animal keeps the orb company — a personal, delightful touch, not
+a control.
+- **Placement.** It is a pure *overlay* inside the orb's existing 200 dp box
+  (`HushSize.orb`), aligned to the bottom-centre so it "sits" at the base of
+  the orb, in the gap that was already there between the rings and the mix
+  title. **No layout changes:** the orb box keeps its size, so the header, orb,
+  mix title, status line, mix card, scenes, catalog and bottom bar do not move.
+  The critter never covers the play/pause glyph (centred, well above it), the
+  mix title, the timer pill or any control, and it stays clear on both the
+  320 dp and 411 dp widths because it is anchored to the centred orb, not the
+  screen edges. It is drawn ~54 dp and carries no `contentDescription`, so
+  TalkBack skips it.
+- **Art.** Compose vector art only (Canvas primitives — circles, ovals, arcs,
+  a reused `Path` — never emoji, which layoutlib cannot render and which would
+  clash with the line-icon aesthetic). Each animal is a couple of soft fills
+  that read on the night ground, rounded and big-eyed; some tint with or
+  complement the mix accent (`accentFor`).
+- **Mapping** (`critterFor(mix)`, pure and unit-tested). The lead is the
+  **first** sound in mix order whose category is `NATURE`:
+  Rain / Downpour / Thunderstorm → **frog**, Ocean → **whale** (with a spout),
+  Wind → **bird**, Campfire → **fox** (curled, cosy), Stream → **duck**,
+  Crickets → **firefly** (a soft glowing blink). A mix with no nature sound —
+  only noise, only ambience, or empty — gets the default **sleeping cat**,
+  curled up with a tiny floating "z", which suits "Hush" and the sleep theme.
+- **Animation.** One `rememberInfiniteTransition` drives a slow, soft
+  breathe-and-bob (2.6 s while playing, 3.8 s while paused, ease-in-out,
+  reversing), read inside the draw lambda so it invalidates drawing without
+  recomposing; the palette is likewise read only in the draw lambda. Two
+  per-animal accents ride the same phase: the cat's "z" drifts up and fades,
+  the firefly's belly blinks. When the lead nature sound changes the animal
+  swaps with a ~360 ms fade-and-scale (`AnimatedContent`). No per-frame
+  allocation that grows, no blur, no heavy Canvas work.
 
 ### Sleep timer sheet (modal bottom sheet)
 The sheet answers one question — "how long?" — and its three kinds of answer
@@ -171,3 +207,10 @@ screen, the long-press sheet for a sound the full mix has no room for, and
 one catalog section (the three-column grid with the longest labels in it).
 Reference PNGs are committed under `app/src/screenshotTestDebug/reference/`;
 `validateDebugScreenshotTest` runs in the pre-push hook.
+
+`CritterScreenshots` adds the critter coverage the states above do not already
+carry: a `CritterGallery` of all seven animals, each on the ground tint of its
+sound, plus the home screen leading with Wind (bird), Stream (duck) and
+Crickets (firefly). The cat, frog, whale and fox already appear in the states
+above (empty mix, the rain trio, paused Ocean, and Campfire + Wind), which the
+critter changed and which were regenerated.

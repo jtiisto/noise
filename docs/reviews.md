@@ -113,3 +113,15 @@ line ("Rain") or two ("Airplane cabin"). Verified by rendering the catalog at
 411 dp (the reporter's phone width) in the screenshot harness; all committed
 references regenerated and validated.
 
+
+## 2026-09-12 — Cute companion critter (0.1.4)
+
+A small, gently-animated animal now sits at the base of the play orb, matched
+to the nature sound in the mix: frog (rain/downpour/thunderstorm), whale
+(ocean), bird (wind), fox (campfire), duck (stream), firefly (crickets), and a
+curled sleeping cat with a floating "z" as the default for noise, ambience or
+an empty mix. Drawn as Compose vector art (renders in the screenshot harness,
+unlike emoji), overlaid inside the orb's existing 200 dp box so the layout is
+unchanged, with one cheap idle breathe/bob and a soft fade-scale swap when the
+lead nature sound changes. Pure `critterFor(mix)` mapping is unit-tested; a
+gallery screenshot guards all seven.
