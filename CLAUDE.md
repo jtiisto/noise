@@ -50,6 +50,15 @@ noise/
   2026-09-12). Read the true number by momentarily raising the bound to 100
   and reading the violation message — the XML report ignores the
   `@Composable` filter and under-reports.
+- **Kover gotcha (bit us 2026-09-12):** module-scoped runs such as
+  `./gradlew :core:audio:testDebugUnitTest` write execution data without the
+  root filters, and a later `koverVerifyAggregated` then reports a wrong,
+  lower number (89.6 % vs the real 93+ %) and fails the pre-push gate in one
+  second. Recovery: delete `build/kover */build/kover */*/build/kover
+  */build/tmp/koverCachedVerify* */*/build/tmp/koverCachedVerify*
+  */build/test-results/testDebugUnitTest */*/build/test-results/testDebugUnitTest`
+  and re-run `./gradlew testDebugUnitTest koverVerifyAggregated --no-build-cache --rerun-tasks`.
+  Prefer the unscoped `./gradlew testDebugUnitTest` before any push.
 - Emulator workflow: `/adb-connect`, `/adb-deploy` (`dev.jtiisto.noise/.MainActivity`).
   Without an emulator, ship the APK: `rclone copyto app/build/outputs/apk/release/app-release.apk "gdrive:Hush/APKs/hush-<yyyymmdd-hhmm>.apk"`
   and/or `/personal-share`.
