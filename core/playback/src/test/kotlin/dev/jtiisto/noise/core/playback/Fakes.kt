@@ -2,6 +2,7 @@ package dev.jtiisto.noise.core.playback
 
 import dev.jtiisto.noise.core.audio.AudioEngine
 import dev.jtiisto.noise.core.model.Mix
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -34,6 +35,14 @@ class FakeAudioEngine : AudioEngine {
 
     private var onFadeComplete: (() -> Unit)? = null
 
+    /**
+     * The callback handed to the last [beginFadeOut], kept even after a stop or
+     * cancel so a test can fire a *stale* completion the way a real audio
+     * thread would when it raced a timer restart.
+     */
+    var lastFadeCallback: (() -> Unit)? = null
+        private set
+
     val fadeStartCount: Int get() = fadeDurations.size
     val isFading: Boolean get() = onFadeComplete != null
 
@@ -64,6 +73,7 @@ class FakeAudioEngine : AudioEngine {
     override fun beginFadeOut(durationMs: Long, onComplete: () -> Unit) {
         fadeDurations += durationMs
         onFadeComplete = onComplete
+        lastFadeCallback = onComplete
     }
 
     override fun cancelFadeOut() {
@@ -80,7 +90,16 @@ class FakeAudioEngine : AudioEngine {
     }
 }
 
-class FakeStateStore(private val initial: PersistedState = PersistedState()) : StateStore {
+class FakeStateStore(
+    private val initial: PersistedState = PersistedState(),
+    /**
+     * When set, [load] suspends on it — that is the cold-start window in which
+     * the user can already be tapping tiles. Complete it to let restore finish.
+     */
+    private val loadGate: CompletableDeferred<Unit>? = null,
+    /** When set, [load] throws it — a disk that cannot be read at all. */
+    private val loadFailure: Throwable? = null,
+) : StateStore {
     val saves = mutableListOf<PersistedState>()
     var loadCount = 0
         private set
@@ -88,7 +107,9 @@ class FakeStateStore(private val initial: PersistedState = PersistedState()) : S
     val last: PersistedState? get() = saves.lastOrNull()
 
     override suspend fun load(): PersistedState {
+        loadGate?.await()
         loadCount++
+        loadFailure?.let { throw it }
         return initial
     }
 
@@ -139,7 +160,19 @@ class VirtualClock(
     private val scheduler: TestCoroutineScheduler,
     private val epochAtStart: Long = EPOCH_START,
 ) : Clock {
-    override fun now(): Long = epochAtStart + scheduler.currentTime
+    /**
+     * How many times the clock was read. The timer's tick reads it exactly
+     * once per second, so this is how a test proves only one tick loop is
+     * running — two loops produce identical `remainingMillis` and are
+     * otherwise invisible.
+     */
+    var reads = 0
+        private set
+
+    override fun now(): Long {
+        reads++
+        return epochAtStart + scheduler.currentTime
+    }
 
     companion object {
         /** An arbitrary but realistic "now" (2023-11-14T22:13:20Z). */

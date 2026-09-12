@@ -52,6 +52,12 @@ interface PlaybackController {
   with `Main.immediate` a call already on the main thread runs inline.
   `toggleSound` is the exception that must answer synchronously, so it decides
   from the current snapshot and only schedules the mutation.
+  Until `restore()` has applied the persisted state, commands and focus events
+  are **queued in arrival order** rather than run, then replayed once the disk
+  state is in place — the controller is created eagerly at Koin start and the
+  load suspends, so the user can already be tapping tiles, and their intent
+  must win over the disk's. A load that *fails* still opens the queue,
+  otherwise the controller would be deaf for the rest of the session.
   - `AudioEngine` (core/audio).
   - `StateStore` — persists `PersistedState(mix, masterVolume, settings,
     wasPlaying, timerEndAtEpochMillis, timerTotalMillis)`; `DataStoreStateStore`
@@ -79,7 +85,9 @@ interface PlaybackController {
     if we were playing); DUCK → `engine.setDucked(true)`, `isDucked=true`;
     GAIN → unduck, and play again if `resumeOnGain`. BECOMING_NOISY → pause
     (no resume). Toggling `mixWithOtherApps` while playing takes effect at
-    once: turning it on abandons focus, turning it off requests it.
+    once: turning it on abandons focus, turning it off requests it — and if
+    that request is refused we pause, exactly as `play()` would (no sound
+    without focus).
   - Timer: `startTimer(m)` clamps `m` to 5..480, sets `endAt = now + m min`,
     ticks every second (test dispatcher friendly), and calls
     `engine.beginFadeOut(remainingMillis)` exactly once when
@@ -89,6 +97,14 @@ interface PlaybackController {
     the timer and flushes. `cancelTimer()` → `engine.cancelFadeOut()` if
     fading. Changing `fadeOutSeconds` while a timer runs applies to that timer
     and can open the fade window immediately.
+  - Arming a timer always tears the previous tick loop down first, so restore
+    and `startTimer` racing each other cannot leave two loops ticking.
+  - Each fade carries a **generation** stamped when `beginFadeOut` was issued
+    and bumped whenever a timer is armed or torn down. The engine reports
+    completion from the audio thread and it is handled a dispatch later, by
+    which time the user may have restarted or cancelled the timer; a
+    completion whose generation no longer matches is dropped, so a stale fade
+    can never pause playback the user just restarted.
   - Only a *user* pause cancels the timer. A pause forced on us (focus loss,
     becoming-noisy) leaves the wall-clock timer running, since the user did
     not change their mind about when the sound should end; if it runs out

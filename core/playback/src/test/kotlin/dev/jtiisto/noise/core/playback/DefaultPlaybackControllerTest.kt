@@ -6,6 +6,7 @@ import dev.jtiisto.noise.core.model.Scenes
 import dev.jtiisto.noise.core.model.SoundId
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -92,6 +93,25 @@ class DefaultPlaybackControllerTest {
 
         assertEquals(1, f.focus.requestCount)
         assertTrue(f.state.isPlaying)
+    }
+
+    @Test
+    fun `turning mixWithOtherApps off pauses when focus is refused`() = playbackTest { f ->
+        f.controller.updateSettings { it.copy(mixWithOtherApps = true) }
+        f.controller.toggleSound(SoundId.RAIN)
+        f.controller.startTimer(30)
+        assertTrue(f.state.isPlaying)
+        f.focus.granted = false
+
+        f.controller.updateSettings { it.copy(mixWithOtherApps = false) }
+
+        // Same rule as play(): no focus, no sound.
+        assertFalse(f.state.isPlaying)
+        assertNull(f.state.timer)
+        assertEquals(1, f.engine.stopCount)
+        val saved = checkNotNull(f.store.last)
+        assertFalse(saved.wasPlaying)
+        assertFalse(saved.settings.mixWithOtherApps)
     }
 
     @Test

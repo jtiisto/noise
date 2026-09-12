@@ -222,6 +222,36 @@ class PlaybackTimerTest {
     }
 
     @Test
+    fun `a stale fade completion cannot cancel a restarted timer`() = playbackTest { f ->
+        f.controller.toggleSound(SoundId.RAIN)
+        f.controller.startTimer(5)
+        advanceThrough(255_000)
+        // The audio thread is about to report this fade complete.
+        val staleCompletion = checkNotNull(f.engine.lastFadeCallback)
+
+        f.controller.startTimer(30) // the user changes their mind first
+        staleCompletion()           // ...and only now does the old fade land
+
+        assertTrue(f.state.isPlaying)
+        assertEquals(0, f.engine.stopCount)
+        assertEquals(30 * minute, checkNotNull(f.state.timer).totalMillis)
+    }
+
+    @Test
+    fun `a stale fade completion cannot pause after the timer was cancelled`() = playbackTest { f ->
+        f.controller.toggleSound(SoundId.RAIN)
+        f.controller.startTimer(5)
+        advanceThrough(255_000)
+        val staleCompletion = checkNotNull(f.engine.lastFadeCallback)
+
+        f.controller.cancelTimer()
+        staleCompletion()
+
+        assertTrue(f.state.isPlaying)
+        assertEquals(0, f.engine.stopCount)
+    }
+
+    @Test
     fun `a manual pause cancels the timer`() = playbackTest { f ->
         f.controller.toggleSound(SoundId.RAIN)
         f.controller.startTimer(30)

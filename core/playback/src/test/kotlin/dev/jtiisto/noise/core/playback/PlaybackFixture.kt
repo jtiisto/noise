@@ -2,6 +2,8 @@
 
 package dev.jtiisto.noise.core.playback
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -27,14 +29,24 @@ import kotlinx.coroutines.test.runTest
 class PlaybackFixture(
     scheduler: TestCoroutineScheduler,
     persisted: PersistedState = PersistedState(),
+    /** Set to hold `store.load()` open and exercise the cold-start command queue. */
+    val loadGate: CompletableDeferred<Unit>? = null,
+    loadFailure: Throwable? = null,
 ) {
+    /** Anything the controller's coroutines threw and nobody handled. */
+    val uncaught = mutableListOf<Throwable>()
+
     val engine = FakeAudioEngine()
-    val store = FakeStateStore(persisted)
+    val store = FakeStateStore(persisted, loadGate, loadFailure)
     val focus = FakeAudioFocusGate()
     val launcher = FakeServiceLauncher()
     val clock = VirtualClock(scheduler)
 
-    private val scope = CoroutineScope(SupervisorJob() + StandardTestDispatcher(scheduler))
+    private val scope = CoroutineScope(
+        SupervisorJob() +
+            StandardTestDispatcher(scheduler) +
+            CoroutineExceptionHandler { _, throwable -> uncaught += throwable },
+    )
 
     val controller: PlaybackController = DefaultPlaybackController(
         engine = engine,
@@ -58,9 +70,11 @@ class PlaybackFixture(
  */
 fun playbackTest(
     persisted: PersistedState = PersistedState(),
+    loadGate: CompletableDeferred<Unit>? = null,
+    loadFailure: Throwable? = null,
     body: suspend TestScope.(PlaybackFixture) -> Unit,
 ): TestResult = runTest(StandardTestDispatcher()) {
-    val fixture = PlaybackFixture(testScheduler, persisted)
+    val fixture = PlaybackFixture(testScheduler, persisted, loadGate, loadFailure)
     try {
         body(fixture)
     } finally {

@@ -47,6 +47,18 @@ android {
     experimentalProperties["android.experimental.enableScreenshotTest"] = true
 }
 
+composeCompiler {
+    // Marks the cross-module state types stable so screens skip recomposition
+    // when their inputs are unchanged (see compose-stability.conf).
+    stabilityConfigurationFiles.add(rootProject.layout.projectDirectory.file("compose-stability.conf"))
+    // Compiler reports show which composables are skippable; kept out of the
+    // build by default, generate with -Pnoise.composeReports=true.
+    if (providers.gradleProperty("noise.composeReports").isPresent) {
+        reportsDestination = layout.buildDirectory.dir("compose_reports")
+        metricsDestination = layout.buildDirectory.dir("compose_metrics")
+    }
+}
+
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:audio"))

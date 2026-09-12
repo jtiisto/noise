@@ -28,6 +28,12 @@ import kotlinx.coroutines.launch
  * [toggleSound] is the one method that must answer immediately (the UI shows a
  * "3 layers max" hint from the result), so it decides from the current state
  * snapshot and schedules only the mutation.
+ *
+ * Cold start is a race: the controller is created eagerly at Koin start and
+ * [restore] suspends on disk I/O, so the user can tap a tile before the
+ * persisted state has landed. Commands and focus events that arrive in that
+ * window are queued in order and replayed once restore has applied the disk
+ * state, so what the user just did wins over what the disk remembers.
  */
 class DefaultPlaybackController(
     private val engine: AudioEngine,
@@ -57,9 +63,23 @@ class DefaultPlaybackController(
     /** Restoring writes the state we just read; persisting it back would be pointless churn. */
     private var restoring = false
 
+    /**
+     * Bumped whenever a timer is armed or torn down. A fade completion arrives
+     * from the audio thread and is only handled a dispatch later, by which time
+     * the user may have restarted the timer; the generation captured when the
+     * fade was issued tells a stale completion from a live one.
+     */
+    private var fadeGeneration = 0
+
+    /** Open once [restore] has applied the persisted state; until then commands queue. */
+    private var restored = false
+
+    /** Commands issued before the persisted state landed, replayed in arrival order. */
+    private val pendingCommands = ArrayDeque<() -> Unit>()
+
     init {
         scope.launch(mainDispatcher) {
-            focus.events.collect { onFocusEvent(it) }
+            focus.events.collect { event -> runOrQueue { onFocusEvent(event) } }
         }
         scope.launch(mainDispatcher) { restore() }
     }
@@ -154,7 +174,14 @@ class DefaultPlaybackController(
             focus.abandon()
             holdsFocus = false
         } else if (!next.mixWithOtherApps && !holdsFocus && _state.value.isPlaying) {
-            holdsFocus = focus.request()
+            if (focus.request()) {
+                holdsFocus = true
+            } else {
+                // Same rule as play(): no focus, no sound. pauseByUser() has
+                // already flushed the new settings along with the paused state.
+                pauseByUser()
+                return@dispatch
+            }
         }
 
         // A new fade window applies to the timer that is already running.
@@ -190,7 +217,8 @@ class DefaultPlaybackController(
         // cut out abruptly when the timer completes.
         val timer = _state.value.timer
         if (fadeStarted && timer != null) {
-            engine.beginFadeOut(timer.remainingMillis) { onEngineFadeComplete() }
+            val generation = fadeGeneration
+            engine.beginFadeOut(timer.remainingMillis) { onEngineFadeComplete(generation) }
         }
 
         schedulePersist()
@@ -234,6 +262,10 @@ class DefaultPlaybackController(
     // ------------------------------------------------------------------- timer
 
     private fun armTimer(totalMillis: Long, endAtEpochMillis: Long) {
+        // Never leave a previous tick loop running: restore() and startTimer()
+        // can both reach here, and two loops would double every tick.
+        stopTimer(cancelFade = false)
+        fadeGeneration++
         fadeStarted = false
         _state.update {
             it.copy(
@@ -262,7 +294,7 @@ class DefaultPlaybackController(
         // Normally the engine's fade callback completes the timer. When we are
         // paused (a focus loss during the fade) no callback is coming, so the
         // tick has to finish the job itself.
-        if (remaining == 0L && !_state.value.isPlaying) completeTimer()
+        if (remaining == 0L && !_state.value.isPlaying) completeTimer(fadeGeneration)
     }
 
     private fun maybeBeginFade() {
@@ -273,13 +305,17 @@ class DefaultPlaybackController(
         if (!current.isPlaying) return // nothing to fade; startPlayback() re-issues it
         // Fade over what is actually left, not the nominal window: a fade
         // window longer than the remaining time would outlive the timer.
-        engine.beginFadeOut(timer.remainingMillis) { onEngineFadeComplete() }
+        val generation = fadeGeneration
+        engine.beginFadeOut(timer.remainingMillis) { onEngineFadeComplete(generation) }
     }
 
     /** Called from the engine's thread. */
-    private fun onEngineFadeComplete() = dispatch { completeTimer() }
+    private fun onEngineFadeComplete(generation: Int) = dispatch { completeTimer(generation) }
 
-    private fun completeTimer() {
+    private fun completeTimer(generation: Int) {
+        // A completion for a timer that has since been cancelled or restarted
+        // must not pause the one that is running now.
+        if (generation != fadeGeneration) return
         if (_state.value.timer == null) return // already cancelled or completed
         stopTimer(cancelFade = false)
         resumeOnGain = false
@@ -288,6 +324,7 @@ class DefaultPlaybackController(
     }
 
     private fun stopTimer(cancelFade: Boolean) {
+        fadeGeneration++
         timerJob?.cancel()
         timerJob = null
         if (cancelFade && fadeStarted && _state.value.isPlaying) engine.cancelFadeOut()
@@ -341,33 +378,51 @@ class DefaultPlaybackController(
     // ------------------------------------------------------------- persistence
 
     private suspend fun restore() {
-        val persisted = store.load()
-        val now = clock.now()
-        val hasTimer = persisted.timerEndAtEpochMillis > 0L
-        val timerExpired = hasTimer && persisted.timerEndAtEpochMillis <= now
-
-        restoring = true
         try {
-            _state.update {
-                it.copy(
-                    mix = persisted.mix,
-                    masterVolume = persisted.masterVolume,
-                    settings = persisted.settings,
-                )
+            val persisted = store.load()
+            val now = clock.now()
+            val hasTimer = persisted.timerEndAtEpochMillis > 0L
+            val timerExpired = hasTimer && persisted.timerEndAtEpochMillis <= now
+
+            restoring = true
+            try {
+                _state.update {
+                    it.copy(
+                        mix = persisted.mix,
+                        masterVolume = persisted.masterVolume,
+                        settings = persisted.settings,
+                    )
+                }
+                // An expired timer means playback *should* already have stopped
+                // while we were dead: come back paused, not blaring at 4am.
+                if (persisted.wasPlaying && !persisted.mix.isEmpty && !timerExpired) startPlayback()
+                if (hasTimer && !timerExpired) {
+                    armTimer(
+                        totalMillis = persisted.timerTotalMillis,
+                        endAtEpochMillis = persisted.timerEndAtEpochMillis,
+                    )
+                }
+            } finally {
+                restoring = false
             }
-            // An expired timer means playback *should* already have stopped
-            // while we were dead: come back paused, not blaring at 4am.
-            if (persisted.wasPlaying && !persisted.mix.isEmpty && !timerExpired) startPlayback()
-            if (hasTimer && !timerExpired) {
-                armTimer(
-                    totalMillis = persisted.timerTotalMillis,
-                    endAtEpochMillis = persisted.timerEndAtEpochMillis,
-                )
-            }
+            if (timerExpired) persistNow() // clear the stale timer on disk
         } finally {
-            restoring = false
+            // Even a failed load has to open the gate, or every command issued
+            // since launch would sit in the queue forever.
+            releaseCommandQueue()
         }
-        if (timerExpired) persistNow() // clear the stale timer on disk
+    }
+
+    /**
+     * Replays what the user did while the disk was still being read. Their
+     * commands run *after* the persisted state was applied, so they overwrite
+     * it rather than the other way round.
+     */
+    private fun releaseCommandQueue() {
+        restored = true
+        while (pendingCommands.isNotEmpty()) {
+            pendingCommands.removeFirst().invoke()
+        }
     }
 
     private fun schedulePersist() {
@@ -400,7 +455,12 @@ class DefaultPlaybackController(
     }
 
     private fun dispatch(block: () -> Unit) {
-        scope.launch(mainDispatcher) { block() }
+        scope.launch(mainDispatcher) { runOrQueue(block) }
+    }
+
+    /** Main-thread only: runs [block] now, or queues it until restore is done. */
+    private fun runOrQueue(block: () -> Unit) {
+        if (restored) block() else pendingCommands.addLast(block)
     }
 
     private companion object {

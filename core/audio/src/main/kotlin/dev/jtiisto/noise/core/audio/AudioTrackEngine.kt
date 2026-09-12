@@ -97,7 +97,11 @@ class AudioTrackEngine(
     // ---- Render thread --------------------------------------------------------
 
     private fun renderLoop() {
-        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+        // Best effort: some OEM builds refuse the audio nice level for
+        // unprivileged apps and throw. Losing the boost is a soft degradation;
+        // an exception escaping here would kill the process, so never let it.
+        runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO) }
+            .onFailure { Log.w(TAG, "could not raise audio thread priority", it) }
 
         val frames = effectiveConfig.blockFrames
         val left = FloatArray(frames)
