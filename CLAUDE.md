@@ -46,6 +46,10 @@ noise/
     checkout; filtered test runs poison Kover data, see wellness notes)
 - Kover excludes device-only glue (service, engine sink, focus gate,
   DataStore wrapper, Composables, DI modules, theme); everything else counts.
+  Gate `minBound(90)` in the root `build.gradle.kts` (baseline 93.5 % measured
+  2026-09-12). Read the true number by momentarily raising the bound to 100
+  and reading the violation message — the XML report ignores the
+  `@Composable` filter and under-reports.
 - Emulator workflow: `/adb-connect`, `/adb-deploy` (`dev.jtiisto.noise/.MainActivity`).
   Without an emulator, ship the APK: `rclone copyto app/build/outputs/apk/release/app-release.apk "gdrive:Hush/APKs/hush-<yyyymmdd-hhmm>.apk"`
   and/or `/personal-share`.

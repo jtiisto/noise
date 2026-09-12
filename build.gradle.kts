@@ -46,10 +46,11 @@ kover {
         variant("aggregated") {
             verify {
                 rule {
-                    // Set from the first measured baseline (see CLAUDE.md);
-                    // raise as coverage improves, never lower without a
-                    // deliberate decision.
-                    minBound(80)
+                    // Baseline-derived gate: 93.5 % aggregated line coverage
+                    // measured 2026-09-12 at the first integrated build (device
+                    // glue and Composables excluded above). Raise as coverage
+                    // improves, never lower without a deliberate decision.
+                    minBound(90)
                 }
             }
         }

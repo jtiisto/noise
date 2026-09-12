@@ -17,3 +17,4 @@
 *.keystore
 /app/release
 /.claude/worktrees/
+/core/build
