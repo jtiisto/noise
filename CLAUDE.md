@@ -78,6 +78,20 @@ noise/
 - Resume after process death when the app was playing (persisted wall-clock
   timer end).
 
+## On-device smoke test (required before shipping)
+A headless emulator runs on the build server itself, so a real launch is part
+of the release gate now (a foreground-service crash shipped in 0.1.0 because no
+build had ever been run on a device — see docs/reviews.md).
+- KVM works but the user is not in the `kvm` group by default; run the emulator
+  through `sg kvm -c "..."`.
+- Setup (one-time): `sdkmanager "emulator" "system-images;android-35;google_apis;x86_64"`,
+  then `avdmanager create avd -n hush_test -k "system-images;android-35;google_apis;x86_64" -d pixel_6a`.
+- Boot headless: `sg kvm -c "$ANDROID_SDK/emulator/emulator -avd hush_test -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot"`.
+- Drive the UI over ADB with uiautomator dumps (tap by content-desc); read
+  crashes with `adb logcat -b crash`. Smoke path: launch, add a sound, play,
+  allow notifications, add a third sound, confirm `isForeground=true` and no
+  FATAL, swipe away and reopen, start a short timer and let it fade out.
+
 ## Current Status (2026-09-12)
 v0.1.0 complete and reviewed: 16 synthesized sounds, 3-layer mixer, scenes,
 sleep timer with fade and an explicit until-cancelled mode, Media3 foreground
@@ -85,8 +99,7 @@ playback with lock-screen controls, audio focus + becoming-noisy handling,
 persistence with resume after process death. 361 unit tests (model 7, audio
 143, playback 83, app 98 + 12 screenshot references), Kover gate 90 (baseline
 93.5 %). Codex review #1 findings all fixed (`docs/reviews.md`). Release APK
-1.7 MB, signed with the local keystore. Not yet exercised on a device or the
-emulator — first on-device checks to do: notification/lock-screen controls,
+1.7 MB, signed with the local keystore. Exercised on a headless API 35 emulator — first on-device checks to do: notification/lock-screen controls,
 headphone unplug, timer fade at the end, resume after force-stop, and the
 subjective sound quality of stream/thunder/rain (see `docs/sound-design.md`
 for the tuning knobs).

@@ -58,6 +58,14 @@ fun HomePausedSingleLayer() {
     HomeScreenPreview(PreviewStates.pausedSingle)
 }
 
+/** The morning after: the one-time crash notice sits above the orb. */
+@PreviewTest
+@Preview(widthDp = PHONE_WIDTH, heightDp = PHONE_HEIGHT, showBackground = true, backgroundColor = NIGHT)
+@Composable
+fun HomeCrashNotice() {
+    HomeScreenPreview(PreviewStates.pausedSingle, crashReport = PreviewStates.CRASH_REPORT)
+}
+
 @PreviewTest
 @Preview(widthDp = SMALL_WIDTH, heightDp = SMALL_HEIGHT, showBackground = true, backgroundColor = NIGHT)
 @Composable

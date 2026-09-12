@@ -155,6 +155,26 @@ fun HomeScreen(
                 ) {
                     Spacer(Modifier.height(HushSpacing.md))
 
+                    // Sits above the orb rather than over it: the app still
+                    // works, and the user came here to start a sound.
+                    AnimatedVisibility(
+                        visible = ui.crashNoticeVisible,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
+                    ) {
+                        Column {
+                            CrashNoticeCard(
+                                onShare = {
+                                    ui.crashReport?.let { shareCrashReport(context, it) }
+                                    actions.onShareCrashReport()
+                                },
+                                onDismiss = actions::onDismissCrashReport,
+                                modifier = Modifier.padding(horizontal = HushSpacing.screen),
+                            )
+                            Spacer(Modifier.height(HushSpacing.lg))
+                        }
+                    }
+
                     PlayOrb(
                         isPlaying = state.isPlaying,
                         enabled = !mix.isEmpty,
@@ -260,8 +280,13 @@ fun HomeScreen(
         HomeSheet.Settings -> SettingsSheet(
             settings = state.settings,
             accent = palette.value.accent,
+            crashReport = ui.crashReport,
             onMixWithOtherAppsChange = actions::onMixWithOtherAppsChange,
             onFadeSecondsChange = actions::onFadeSecondsChange,
+            onShareCrashReport = {
+                ui.crashReport?.let { shareCrashReport(context, it) }
+                actions.onShareCrashReport()
+            },
             onDismiss = actions::onSheetDismiss,
         )
         is HomeSheet.Sound -> SoundDetailSheet(

@@ -37,3 +37,36 @@ generated compiler report).
 | 2 | Medium-High | A `store.load()` failure opened the command gate but the exception escaped a coroutine on the application scope, which has no handler — a process crash at launch on a disk read error. | **Fixed** — `restore()` falls back to defaults and counts the failure; `DataStoreStateStore` swallows and logs `IOException` on both load and save. The cold-start test now asserts nothing escapes. |
 | 3 | Medium | Four of the five polish behaviours (rain close drops, thunder darkening, wind buffet, ocean second-order body) had no test that could fail. | **Fixed** — behaviour tests added with preset-knob controls (see `NatureGeneratorTest`). |
 
+## 2026-09-12 — Field crash #1: foreground-service start (fixed in 0.1.1)
+
+The user hit Android's "Hush keeps stopping" on a real phone, then reproduced
+it by adding a sound and pressing play. Reproduced on a local API 35 emulator
+and captured the trace:
+
+```
+android.app.RemoteServiceException$ForegroundServiceDidNotStartInTimeException:
+Context.startForegroundService() did not then call Service.startForeground(): HushPlaybackService
+```
+
+**Cause.** `play()` starts the service with `startForegroundService()`, which
+obliges the service to call `startForeground()` within ~5 s. `HushPlaybackService`
+left that to Media3, which only promotes once its player-state listener has run;
+on the first play the POST_NOTIFICATIONS dialog delays that past the deadline, so
+the OS killed the process. Not Airplane-specific — the first foreground start.
+No unit test could catch it (the service is device-only glue) and no emulator
+run had happened before shipping.
+
+**Fix.** `HushPlaybackService.onStartCommand` now calls `startForeground()`
+immediately with a placeholder notification on Media3's own channel and id
+(1001), so the OS contract is met the instant the service starts; Media3
+replaces the notification when the session is ready. Verified on the emulator
+(debug and release): `isForeground=true foregroundId=1001 type=mediaPlayback`,
+zero crashes through play → allow notifications → add Airplane cabin, past the
+5 s deadline. A `SampleRateRobustnessTest` was also added (every generator at
+22.05–192 kHz) to rule out the device's non-48 kHz output rate, which unit
+tests had never exercised.
+
+**Process change (CLAUDE.md):** a headless emulator now runs on the build
+server (KVM), so on-device smoke testing is part of the release gate, not
+optional. This crash would have been caught before shipping by a single launch.
+

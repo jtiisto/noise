@@ -134,13 +134,38 @@ form a single list, bracketed by two full-width rows:
   the body inside `SheetPreviewFrame` — same scrim, ground, corners and
   handle.
 
+## Crash reports
+The app is side-loaded, so nothing collects its stack traces. A
+`Thread.UncaughtExceptionHandler` installed as the first statement of
+`HushApplication.onCreate` (before Koin, because a crash while the graph is
+being built is the one worth catching) writes `filesDir/crash/last_crash.txt`
+and then hands the crash back to the handler it replaced, so Android's own
+dialog and process kill are unchanged. One file, overwritten: only the last
+crash matters. The report is plain text — timestamp, thread, versionName and
+versionCode, manufacturer/model, Android release and API level, then the full
+stack trace with its `Caused by` chain. Formatting is a pure function
+(`crash/CrashLog.format`), the file plumbing a `CrashReportStore` over one
+directory, so both are unit tested and neither can throw out of the handler.
+
+On the next launch `HomeViewModel` reads the report once and, if there is one,
+Home shows a dismissible card between the header and the orb: an outline
+warning glyph, "Hush crashed last time", and the actions **Share report** and
+**Dismiss**. It uses the mix card's surface, hairline and text buttons rather
+than a coloured banner — the app still works, and the night ground has no room
+for an alarm. Share opens the system share sheet (`ACTION_SEND`, `text/plain`,
+the report in `EXTRA_TEXT`; no `FileProvider`) and hides the card but keeps the
+file, so backing out of the share sheet does not lose the trace. Dismiss
+deletes it. While a report exists, Settings carries a "Share last crash report"
+row under About; once dismissed, the row disappears with it.
+
 ## Screenshot tests (`app/src/screenshotTest`)
 `@PreviewTest` previews via `FakePlaybackController`, on a 360 × 780 phone
 frame unless noted: empty mix (idle), playing 3-layer mix with a running
 timer, playing 2-layer mix with no timer (the "No timer" pill and the
 "until cancelled" status line), paused 1-layer mix, timer sheet (running),
 timer sheet with "Until cancelled" selected, timer sheet with the custom
-slider open, settings sheet, catalog long-press sheet in the mix, and
+slider open, settings sheet, catalog long-press sheet in the mix, the crash
+notice above a paused single-layer mix, and
 — at 320 × 640, to prove the smallest supported screen — the playing home
 screen, the long-press sheet for a sound the full mix has no room for, and
 one catalog section (the three-column grid with the longest labels in it).

@@ -4,6 +4,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
@@ -43,6 +47,7 @@ class HushPlaybackService : MediaSessionService() {
         ensureNotificationChannel()
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider.Builder(this)
+                .setNotificationId(NOTIFICATION_ID)
                 .setChannelId(CHANNEL_ID)
                 .setChannelName(R.string.hush_playback_channel_name)
                 .build(),
@@ -64,10 +69,56 @@ class HushPlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // The OS gives a service started with startForegroundService() ~5 s to
+        // call startForeground(); Media3 otherwise only promotes once its
+        // player-state listener has run, and on the very first play the
+        // POST_NOTIFICATIONS dialog delays that past the deadline — the system
+        // then kills the process with ForegroundServiceDidNotStartInTime.
+        // Promote immediately with a placeholder on the same channel and id
+        // Media3 uses; Media3 replaces this notification the moment the session
+        // is ready. Never let this throw: a background-start refusal is handled
+        // by falling back to Media3's own lifecycle.
+        promoteToForeground()
         super.onStartCommand(intent, flags, startId)
-        // Restart after a process kill; the controller restores itself from
-        // disk and resumes if it was playing.
+        // START_STICKY so a process killed mid-playback is recreated; the
+        // controller restores from disk and resumes if it was playing.
         return START_STICKY
+    }
+
+    private fun promoteToForeground() {
+        val launch = packageManager.getLaunchIntentForPackage(packageName)
+        val contentIntent = launch?.let {
+            PendingIntent.getActivity(
+                this,
+                0,
+                it,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        }
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(controller.state.value.mix.title(getString(R.string.hush_playback_channel_name)))
+            .setContentIntent(contentIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+        try {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                } else {
+                    0
+                },
+            )
+        } catch (e: Exception) {
+            // e.g. ForegroundServiceStartNotAllowedException on a background
+            // start we could not satisfy; the launcher already guards the
+            // start call, and playback continues in-process regardless.
+            android.util.Log.w("HushPlaybackService", "could not enter foreground", e)
+        }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -152,6 +203,10 @@ class HushPlaybackService : MediaSessionService() {
     private companion object {
         const val CHANNEL_ID = "hush_playback"
         const val SESSION_ID = "hush"
+
+        // Media3's DefaultMediaNotificationProvider default id; sharing it lets
+        // Media3's rich notification replace our bootstrap one in place.
+        const val NOTIFICATION_ID = 1001
         const val IDLE_STOP_MILLIS = 60_000L
     }
 }

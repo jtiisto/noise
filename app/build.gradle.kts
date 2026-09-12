@@ -19,8 +19,8 @@ android {
 
     defaultConfig {
         applicationId = "dev.jtiisto.noise"
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     signingConfigs {
@@ -43,6 +43,10 @@ android {
             if (keystorePath.isNotEmpty()) signingConfig = signingConfigs.getByName("release")
         }
     }
+
+    // VERSION_NAME/VERSION_CODE for the crash report header: reading them back
+    // out of PackageManager would mean the API-33-deprecated getPackageInfo.
+    buildFeatures.buildConfig = true
 
     experimentalProperties["android.experimental.enableScreenshotTest"] = true
 }

@@ -3,6 +3,8 @@ package dev.jtiisto.noise.di
 import dev.jtiisto.noise.core.audio.AudioEngine
 import dev.jtiisto.noise.core.audio.AudioTrackEngine
 import dev.jtiisto.noise.core.audio.EngineConfig
+import dev.jtiisto.noise.crash.CrashReportStore
+import dev.jtiisto.noise.crash.FileCrashReportStore
 import dev.jtiisto.noise.ui.home.HomeViewModel
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -18,5 +20,9 @@ val appModule = module {
     // start-up before any UI exists.
     single<AudioEngine> { AudioTrackEngine(EngineConfig()) }
 
-    viewModel { HomeViewModel(controller = get()) }
+    // Same file the uncaught-exception handler wrote to; the store itself holds
+    // no state, so reading it back through a second instance is safe.
+    single<CrashReportStore> { FileCrashReportStore.forApp(get()) }
+
+    viewModel { HomeViewModel(controller = get(), crashReports = get()) }
 }

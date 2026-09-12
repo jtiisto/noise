@@ -11,6 +11,8 @@ import dev.jtiisto.noise.core.model.SoundId
 import dev.jtiisto.noise.core.playback.PlaybackController
 import dev.jtiisto.noise.core.playback.PlaybackState
 import dev.jtiisto.noise.core.playback.ToggleResult
+import dev.jtiisto.noise.crash.CrashReportStore
+import dev.jtiisto.noise.crash.InMemoryCrashReportStore
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -20,11 +22,16 @@ import kotlinx.coroutines.flow.StateFlow
  */
 class HomeViewModel(
     private val controller: PlaybackController,
+    private val crashReports: CrashReportStore = InMemoryCrashReportStore(),
 ) : ViewModel(), HomeActions {
 
     val playback: StateFlow<PlaybackState> get() = controller.state
 
-    var uiState: HomeUiState by mutableStateOf(HomeUiState())
+    // The report is read once, at construction: the file only ever changes
+    // while the process is dying, so re-reading it would find the same thing.
+    var uiState: HomeUiState by mutableStateOf(
+        crashReports.read().let { HomeUiState(crashReport = it, crashNoticeVisible = it != null) },
+    )
         private set
 
     private var lastMessageId = 0L
@@ -90,6 +97,17 @@ class HomeViewModel(
 
     override fun onMessageShown(messageId: Long) {
         if (uiState.message?.id == messageId) uiState = uiState.copy(message = null)
+    }
+
+    override fun onShareCrashReport() {
+        // The report survives the share so the Settings row can offer it again
+        // — a share sheet the user backs out of should not lose the trace.
+        uiState = uiState.copy(crashNoticeVisible = false)
+    }
+
+    override fun onDismissCrashReport() {
+        crashReports.clear()
+        uiState = uiState.copy(crashReport = null, crashNoticeVisible = false)
     }
 
     /** Surfaces a message the screen did not raise itself (a denied permission, say). */

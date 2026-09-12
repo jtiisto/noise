@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -23,6 +24,7 @@ import dev.jtiisto.noise.R
 import dev.jtiisto.noise.core.playback.PlaybackSettings
 import dev.jtiisto.noise.ui.components.HushBottomSheet
 import dev.jtiisto.noise.ui.components.HushSegmentedControl
+import dev.jtiisto.noise.ui.components.HushTextButton
 import dev.jtiisto.noise.ui.components.SectionHeader
 import dev.jtiisto.noise.ui.components.SheetTitle
 import dev.jtiisto.noise.ui.formatFadeSeconds
@@ -34,8 +36,10 @@ import dev.jtiisto.noise.ui.theme.HushSpacing
 fun SettingsSheet(
     settings: PlaybackSettings,
     accent: Color,
+    crashReport: String?,
     onMixWithOtherAppsChange: (Boolean) -> Unit,
     onFadeSecondsChange: (Int) -> Unit,
+    onShareCrashReport: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -44,8 +48,10 @@ fun SettingsSheet(
             settings = settings,
             accent = accent,
             versionName = remember(context) { context.versionName() },
+            hasCrashReport = crashReport != null,
             onMixWithOtherAppsChange = onMixWithOtherAppsChange,
             onFadeSecondsChange = onFadeSecondsChange,
+            onShareCrashReport = onShareCrashReport,
         )
     }
 }
@@ -62,6 +68,8 @@ fun SettingsSheetContent(
     onMixWithOtherAppsChange: (Boolean) -> Unit,
     onFadeSecondsChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    hasCrashReport: Boolean = false,
+    onShareCrashReport: () -> Unit = {},
 ) {
     Column(modifier.fillMaxWidth()) {
         SheetTitle(title = stringResource(R.string.settings_title))
@@ -125,6 +133,20 @@ fun SettingsSheetContent(
             style = MaterialTheme.typography.bodySmall,
             color = HushColor.TextSecondary,
         )
+        // Only while there is something to send: an always-present row would
+        // promise a report that does not exist.
+        if (hasCrashReport) {
+            Spacer(Modifier.height(HushSpacing.sm))
+            HushTextButton(
+                label = stringResource(R.string.settings_share_crash),
+                onClick = onShareCrashReport,
+                color = HushColor.TextPrimary,
+                // Back out the button's own tap padding so the label sits on
+                // the sheet's left margin with the text above it.
+                modifier = Modifier.offset(x = -HushSpacing.md),
+            )
+        }
+
         Spacer(Modifier.height(HushSpacing.lg))
         Text(
             text = stringResource(R.string.settings_licences).uppercase(),

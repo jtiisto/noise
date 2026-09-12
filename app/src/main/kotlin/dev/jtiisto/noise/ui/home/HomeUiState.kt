@@ -28,6 +28,13 @@ data class UiMessage(val id: Long, @param:StringRes val textRes: Int)
 data class HomeUiState(
     val sheet: HomeSheet = HomeSheet.None,
     val message: UiMessage? = null,
+    /**
+     * The report the previous run left behind, if there is one. It stays here
+     * — and keeps the Settings row visible — until the user deletes it.
+     */
+    val crashReport: String? = null,
+    /** The notice under the header: gone for good once shared or dismissed. */
+    val crashNoticeVisible: Boolean = false,
 )
 
 /**
@@ -60,4 +67,10 @@ interface HomeActions {
 
     /** The snackbar host has finished showing [messageId]. */
     fun onMessageShown(messageId: Long)
+
+    /** The share sheet is open; the notice has done its job. */
+    fun onShareCrashReport()
+
+    /** Throw the report away. */
+    fun onDismissCrashReport()
 }

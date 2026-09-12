@@ -4,6 +4,7 @@ import dev.jtiisto.noise.R
 import dev.jtiisto.noise.core.model.Mix
 import dev.jtiisto.noise.core.model.SoundId
 import dev.jtiisto.noise.core.playback.PlaybackState
+import dev.jtiisto.noise.crash.InMemoryCrashReportStore
 import dev.jtiisto.noise.ui.preview.FakePlaybackController
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -227,5 +228,60 @@ class HomeViewModelTest {
     fun `the screen reads playback straight from the controller`() {
         val (vm, controller) = viewModel()
         assertEquals(controller.state, vm.playback)
+    }
+
+    // --- Crash reports ---
+
+    @Test
+    fun `a waiting report raises the notice and keeps the text for sharing`() {
+        val store = InMemoryCrashReportStore("Hush crash report\nboom")
+        val vm = HomeViewModel(FakePlaybackController(), store)
+
+        assertTrue(vm.uiState.crashNoticeVisible)
+        assertEquals("Hush crash report\nboom", vm.uiState.crashReport)
+    }
+
+    @Test
+    fun `no report means no notice`() {
+        val vm = HomeViewModel(FakePlaybackController(), InMemoryCrashReportStore())
+
+        assertFalse(vm.uiState.crashNoticeVisible)
+        assertNull(vm.uiState.crashReport)
+    }
+
+    @Test
+    fun `sharing hides the notice but keeps the report for the settings row`() {
+        val store = InMemoryCrashReportStore("boom")
+        val vm = HomeViewModel(FakePlaybackController(), store)
+
+        vm.onShareCrashReport()
+
+        assertFalse(vm.uiState.crashNoticeVisible)
+        assertEquals("boom", vm.uiState.crashReport)
+        assertEquals("boom", store.read())
+    }
+
+    @Test
+    fun `dismissing hides the notice and deletes the report`() {
+        val store = InMemoryCrashReportStore("boom")
+        val vm = HomeViewModel(FakePlaybackController(), store)
+
+        vm.onDismissCrashReport()
+
+        assertFalse(vm.uiState.crashNoticeVisible)
+        assertNull(vm.uiState.crashReport)
+        assertNull(store.read())
+    }
+
+    @Test
+    fun `the notice does not come back while the process lives`() {
+        val store = InMemoryCrashReportStore("boom")
+        val vm = HomeViewModel(FakePlaybackController(), store)
+        vm.onShareCrashReport()
+
+        vm.onSettingsClick()
+        vm.onSheetDismiss()
+
+        assertFalse(vm.uiState.crashNoticeVisible)
     }
 }

@@ -24,6 +24,7 @@ import dev.jtiisto.noise.core.model.SoundId
 import dev.jtiisto.noise.core.playback.PlaybackSettings
 import dev.jtiisto.noise.core.playback.PlaybackState
 import dev.jtiisto.noise.core.playback.TimerState
+import dev.jtiisto.noise.crash.InMemoryCrashReportStore
 import dev.jtiisto.noise.ui.components.SectionHeader
 import dev.jtiisto.noise.ui.components.auroraBackground
 import dev.jtiisto.noise.ui.components.rememberMixPalette
@@ -73,6 +74,12 @@ object PreviewStates {
         settings = PlaybackSettings(lastTimerMinutes = PlaybackSettings.TIMER_UNTIL_CANCELLED),
     )
 
+    /**
+     * A stand-in for the file the uncaught-exception handler leaves behind.
+     * The notice never shows the text, only that there is some.
+     */
+    const val CRASH_REPORT = "Hush crash report\ntime: 2026-09-11T23:14:02Z\n…"
+
     /** One layer, paused. */
     val pausedSingle = PlaybackState(
         mix = Mix.of(SoundId.OCEAN to 0.82f),
@@ -86,9 +93,11 @@ object PreviewStates {
  * [state]. Previews stay interactive: tapping a tile really changes the mix.
  */
 @Composable
-fun HomeScreenPreview(state: PlaybackState) {
+fun HomeScreenPreview(state: PlaybackState, crashReport: String? = null) {
     val controller = remember(state) { FakePlaybackController(state) }
-    val viewModel = remember(controller) { HomeViewModel(controller) }
+    val viewModel = remember(controller, crashReport) {
+        HomeViewModel(controller, InMemoryCrashReportStore(crashReport))
+    }
     val live by controller.state.collectAsState()
     HushTheme {
         HomeScreen(state = live, ui = viewModel.uiState, actions = viewModel)

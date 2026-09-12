@@ -72,6 +72,15 @@
     <string name="settings_licences">Open-source licences</string>
     <string name="settings_licences_body">Jetpack Compose, AndroidX and Material Icons — Apache License 2.0\nAndroidX Media3 — Apache License 2.0\nKotlin and kotlinx.coroutines — Apache License 2.0\nKoin — Apache License 2.0</string>
 
+    <!-- Crash reports -->
+    <string name="crash_notice_title">Hush crashed last time</string>
+    <string name="crash_notice_body">Share the report so it can be fixed.</string>
+    <string name="crash_share">Share report</string>
+    <string name="crash_dismiss">Dismiss</string>
+    <string name="crash_share_subject">Hush crash report</string>
+    <string name="crash_share_chooser">Share crash report</string>
+    <string name="settings_share_crash">Share last crash report</string>
+
     <!-- Permissions -->
     <string name="notifications_denied">Playback controls will not appear in your notifications.</string>
 
