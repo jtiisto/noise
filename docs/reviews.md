@@ -96,3 +96,20 @@ several rounds. Lesson recorded below.
 command; always `adb uninstall` then `adb install` and assert the installed
 base.apk md5 matches the on-disk APK before trusting an on-device result.
 
+## 2026-09-12 — Catalog tiles looked top-heavy (fixed in 0.1.3)
+
+User reported the icon and label weren't centered on the catalog tiles
+(screenshot). Horizontal centering measured correct; the real issue was
+vertical: the tile was a single centered Column of icon + label + a
+6dp spacer + a volume-dots row that was empty (but height-reserved) on
+unselected tiles. Centering that whole block pushed the visible icon+label
+upward, leaving a large empty gap at the bottom of every tile.
+
+**Fix.** The tile is now a Box: the icon+label are one group centered with
+`align(Center)`, and the volume dots are pinned to `BottomCenter` so they no
+longer pull the optical centre up. The label sits in a fixed two-line slot
+(text centred in it) so icons stay aligned across a row whether a label is one
+line ("Rain") or two ("Airplane cabin"). Verified by rendering the catalog at
+411 dp (the reporter's phone width) in the screenshot harness; all committed
+references regenerated and validated.
+

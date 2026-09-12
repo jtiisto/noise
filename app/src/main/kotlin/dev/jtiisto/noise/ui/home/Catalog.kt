@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -126,7 +127,7 @@ private fun SoundTile(
         label = "tileScale",
     )
 
-    Column(
+    Box(
         modifier
             .height(HushSize.tileHeight)
             // Read inside the layer block so the spring never recomposes the tile.
@@ -146,43 +147,61 @@ private fun SoundTile(
                 contentDescription = context.getString(R.string.cd_sound_tile, id.displayName)
             }
             .padding(horizontal = 4.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier
-                .size(HushSize.tileIcon)
-                .clip(CircleShape)
-                .background(accent.copy(alpha = if (selected) 0.24f else 0.11f)),
-            contentAlignment = Alignment.Center,
+        // Icon + label are centered together as the tile's optical centre; the
+        // volume dots are pinned to the bottom so they never pull that centre
+        // up (an empty dots row on unselected tiles otherwise made every tile
+        // look top-heavy). A fixed two-line label slot with the text centred in
+        // it keeps the icons aligned across a row whether a label is one line
+        // ("Rain") or two ("Airplane cabin").
+        Column(
+            Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(
-                imageVector = id.icon,
-                contentDescription = null,
-                tint = if (selected) accent else accent.copy(alpha = 0.72f),
-                modifier = Modifier.size(21.dp),
-            )
+            Box(
+                Modifier
+                    .size(HushSize.tileIcon)
+                    .clip(CircleShape)
+                    .background(accent.copy(alpha = if (selected) 0.24f else 0.11f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = id.icon,
+                    contentDescription = null,
+                    tint = if (selected) accent else accent.copy(alpha = 0.72f),
+                    modifier = Modifier.size(21.dp),
+                )
+            }
+            Spacer(Modifier.height(HushSpacing.sm))
+            Box(Modifier.height(LabelSlotHeight), contentAlignment = Alignment.Center) {
+                Text(
+                    text = id.displayName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) HushColor.TextPrimary else HushColor.TextSecondary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
-        Spacer(Modifier.height(HushSpacing.sm))
-        Text(
-            text = id.displayName,
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) HushColor.TextPrimary else HushColor.TextSecondary,
-            textAlign = TextAlign.Center,
-            minLines = 2,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+        VolumeDots(
+            gain = gain,
+            accent = accent,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 2.dp),
         )
-        Spacer(Modifier.height(6.dp))
-        VolumeDots(gain = gain, accent = accent)
     }
 }
 
+/** Two lines of the label style, so one- and two-word labels leave icons aligned across a row. */
+private val LabelSlotHeight = 30.dp
+
 /** Three dots showing roughly how loud a selected layer sits. Blank when unselected. */
 @Composable
-private fun VolumeDots(gain: Float?, accent: Color) {
+private fun VolumeDots(gain: Float?, accent: Color, modifier: Modifier = Modifier) {
     Row(
-        Modifier.height(4.dp),
+        modifier.height(4.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
