@@ -186,11 +186,16 @@ class ThunderstormGenerator(
     private fun startRoll() {
         val duration = rng.nextRange(preset.minDurationSeconds, preset.maxDurationSeconds)
         val durationSamples = (duration * sampleRate).toInt()
-        rollSamplesLeft = durationSamples
+        // The *rendered* window is longer than the nominal event, because the
+        // last sub-roll starts 60 % of the way in and then needs its own decay
+        // to finish. Stopping at the nominal length would chop a still-audible
+        // tail off, which is a click; the cutoff sweep holds at its end value
+        // through the extra time so the tail stays dark.
+        rollSamplesLeft = (durationSamples * TAIL_FACTOR).toInt().coerceAtLeast(1)
         rollElapsed = 0
         rollCount++
         val gap = rng.nextRange(preset.minIntervalSeconds, preset.maxIntervalSeconds) * sampleRate
-        samplesUntilRoll = (durationSamples + gap.toInt()).coerceAtLeast(1)
+        samplesUntilRoll = (rollSamplesLeft + gap.toInt()).coerceAtLeast(1)
 
         rollDurationSamples = durationSamples.coerceAtLeast(1)
         rollCutoffStart = rng.nextRange(preset.minCutoffHz, preset.maxCutoffHz)
@@ -266,6 +271,8 @@ class ThunderstormGenerator(
         const val MAX_BUMPS = 4
         const val TONE_Q = 0.707f
         const val CONTROL_PERIOD = 64
+        /** Rendered roll length as a multiple of the nominal event duration. */
+        const val TAIL_FACTOR = 1.6f
         /** The crack sits 9 dB under the roll's own peak — audible, never startling. */
         const val CRACK_LEVEL = 0.35f
     }

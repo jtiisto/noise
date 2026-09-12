@@ -1,5 +1,7 @@
 package dev.jtiisto.noise.core.audio.testing
 
+import dev.jtiisto.noise.core.audio.dsp.Biquad
+
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -229,6 +231,42 @@ object SignalAnalysis {
         }
         return bestBin * binHz
     }
+
+    /**
+     * Fourth-order band-pass (two cascaded biquads each way, ~24 dB/oct
+     * skirts) applied in the time domain, so the result's RMS is a real
+     * dBFS band level rather than an unscaled periodogram number.
+     *
+     * The first [settleSeconds] are dropped: a 30 Hz high-pass takes a
+     * noticeable fraction of a second to settle, and its startup transient
+     * would otherwise dominate a low-band measurement.
+     */
+    fun bandLimit(
+        x: FloatArray,
+        sampleRate: Int,
+        lowHz: Float,
+        highHz: Float,
+        settleSeconds: Double = 0.5,
+    ): FloatArray {
+        val highPassA = Biquad().apply { setHighPass(sampleRate, lowHz, 0.707f) }
+        val highPassB = Biquad().apply { setHighPass(sampleRate, lowHz, 0.707f) }
+        val lowPassA = Biquad().apply { setLowPass(sampleRate, highHz, 0.707f) }
+        val lowPassB = Biquad().apply { setLowPass(sampleRate, highHz, 0.707f) }
+        val skip = (settleSeconds * sampleRate).toInt().coerceAtMost(x.size)
+        val out = FloatArray(x.size - skip)
+        for (i in x.indices) {
+            var v = highPassA.process(x[i])
+            v = highPassB.process(v)
+            v = lowPassA.process(v)
+            v = lowPassB.process(v)
+            if (i >= skip) out[i - skip] = v
+        }
+        return out
+    }
+
+    /** RMS of [x] inside a band, in dBFS. */
+    fun bandRmsDb(x: FloatArray, sampleRate: Int, lowHz: Float, highHz: Float): Double =
+        rmsDb(bandLimit(x, sampleRate, lowHz, highHz))
 
     /** Short-window RMS envelope, one value per [windowSamples] samples. */
     fun rmsEnvelope(x: FloatArray, windowSamples: Int): DoubleArray {

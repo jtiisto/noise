@@ -135,6 +135,9 @@ Nature:
   more than +6 dB (sleep app — no jump scares); the test enforces ≤ 6.5 dB on
   a 250 ms window. Optional "crack" transient only on 1 in 4 rolls, 9 dB under
   the roll's own peak.
+  A roll renders for 1.6× its nominal duration (`TAIL_FACTOR`) with the
+  swept-down cutoff held, so the last sub-roll decays fully instead of being
+  cut mid-tail (a click); the inter-roll gap counts from the extended end.
 - **Ocean** — swell envelope: raised-cosine, period 9–15 s randomized per
   wave, asymmetric (2/5 attack, 3/5 decay), with a 0.07 floor so the sea never
   goes silent; layers: brown (HP 40 Hz) + 40 % pink body following the

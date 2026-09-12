@@ -379,7 +379,16 @@ class DefaultPlaybackController(
 
     private suspend fun restore() {
         try {
-            val persisted = store.load()
+            // A disk that cannot be read is not worth a crash at launch: come
+            // up with defaults, keep the session alive, and let the next save
+            // rewrite the file. The application scope has no exception
+            // handler, so anything escaping here would take the process down.
+            val persisted = try {
+                store.load()
+            } catch (e: Exception) {
+                onLoadFailure(e)
+                PersistedState()
+            }
             val now = clock.now()
             val hasTimer = persisted.timerEndAtEpochMillis > 0L
             val timerExpired = hasTimer && persisted.timerEndAtEpochMillis <= now
@@ -453,6 +462,16 @@ class DefaultPlaybackController(
             timerTotalMillis = current.timer?.totalMillis ?: 0L,
         )
     }
+
+    /** Hook for tests and diagnostics; production logs through the store. */
+    private fun onLoadFailure(error: Exception) {
+        loadFailures++
+        if (error is kotlinx.coroutines.CancellationException) throw error
+    }
+
+    /** Number of restores that had to fall back to defaults; diagnostics only. */
+    var loadFailures: Int = 0
+        private set
 
     private fun dispatch(block: () -> Unit) {
         scope.launch(mainDispatcher) { runOrQueue(block) }

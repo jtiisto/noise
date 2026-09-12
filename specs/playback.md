@@ -165,3 +165,9 @@ interface PlaybackController {
 - `DataStoreStateStore` round-trip is a Robolectric-free unit test of the
   pure `PersistedState` ⇄ `Preferences` mapping functions (kept separate from
   the DataStore wrapper so no Android runtime is needed).
+
+- Load failure:
+  A load that throws (disk unreadable) is treated as an empty store: the
+  controller comes up with defaults, counts the failure (`loadFailures`) and
+  never lets the exception reach the application scope, which has no handler.
+  `DataStoreStateStore` likewise logs and swallows `IOException` on save.

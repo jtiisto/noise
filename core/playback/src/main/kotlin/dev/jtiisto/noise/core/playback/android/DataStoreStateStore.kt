@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStoreFile
+import android.util.Log
+import java.io.IOException
 import dev.jtiisto.noise.core.playback.PersistedState
 import dev.jtiisto.noise.core.playback.PersistedStateCodec
 import dev.jtiisto.noise.core.playback.StateStore
@@ -27,13 +29,28 @@ class DataStoreStateStore(context: Context) : StateStore {
         produceFile = { context.applicationContext.preferencesDataStoreFile(FILE_NAME) },
     )
 
-    override suspend fun load(): PersistedState = PersistedStateCodec.decode(dataStore.data.first())
+    // Corruption is replaced above; a plain read/write failure (full disk,
+    // storage unmounted) is logged and swallowed. The application scope has
+    // no exception handler, so letting either escape would crash the app,
+    // and losing one save or coming up with defaults is the lesser evil.
+    override suspend fun load(): PersistedState = try {
+        PersistedStateCodec.decode(dataStore.data.first())
+    } catch (e: IOException) {
+        Log.w(TAG, "could not read persisted state; using defaults", e)
+        PersistedState()
+    }
 
     override suspend fun save(state: PersistedState) {
-        dataStore.edit { PersistedStateCodec.encode(state, it) }
+        try {
+            dataStore.edit { PersistedStateCodec.encode(state, it) }
+        } catch (e: IOException) {
+            Log.w(TAG, "could not persist state", e)
+        }
     }
 
     private companion object {
+        const val TAG = "HushStateStore"
+
         /** DataStore appends ".preferences_pb" — see specs/persistence.md. */
         const val FILE_NAME = "hush"
     }

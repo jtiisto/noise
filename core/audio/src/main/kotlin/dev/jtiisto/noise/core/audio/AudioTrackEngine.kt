@@ -162,13 +162,17 @@ class AudioTrackEngine(
             // process down in the middle of the night; log and go quiet instead.
             Log.e(TAG, "audio thread stopped", e)
         } finally {
-            track?.let { releaseTrack(it) }
+            // Clear the running state FIRST, under the lock: releaseTrack()
+            // spends real time in JNI, and a start() landing in that window
+            // must see "not running" and spawn a new thread rather than
+            // no-op against one that is already committed to exiting.
             synchronized(lock) {
                 if (thread === Thread.currentThread()) {
                     thread = null
                     running.set(false)
                 }
             }
+            track?.let { releaseTrack(it) }
         }
     }
 

@@ -128,7 +128,11 @@ class PlaybackColdStartTest {
             // A controller that never opened the gate would be deaf for the
             // whole session - far worse than losing the persisted mix.
             assertEquals(listOf(SoundId.RAIN), f.state.mix.ids)
-            assertEquals(1, f.uncaught.size)
+            // ...and the failure must not escape: the production scope has no
+            // exception handler, so an escaping load error would crash the app.
+            assertEquals(0, f.uncaught.size)
+            assertEquals(1, (f.controller as DefaultPlaybackController).loadFailures)
+            assertEquals(PlaybackSettings(), f.state.settings)
         }
     }
 }

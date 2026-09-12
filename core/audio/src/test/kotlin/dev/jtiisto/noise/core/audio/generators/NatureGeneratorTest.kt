@@ -255,6 +255,220 @@ class NatureGeneratorTest {
         )
     }
 
+    // ---- Polish-round behaviours -------------------------------------------
+    // Each of the four tests below pairs the real generator against the same
+    // generator with one preset knob turned off. That control is the design
+    // the feature replaced, so the assertion cannot pass by accident and it
+    // needs no magic absolute threshold.
+
+    @Test
+    @DisplayName("rain's close-drop stream fires at its own, much sparser rate")
+    fun rainCloseDropRate() {
+        for (preset in listOf(RainPreset.LIGHT, RainPreset.DOWNPOUR)) {
+            val generator = RainGenerator(RenderHarness.SAMPLE_RATE, SEED, preset)
+            val seconds = 60.0
+            RenderHarness.renderGenerator(generator, seconds)
+            val measured = generator.closeDropCount / seconds
+            val expected = preset.closeDropsPerSecond.toDouble()
+            println("close drops: %.1f/s preset -> %.2f/s measured".format(expected, measured))
+            assertTrue(
+                abs(measured - expected) / expected <= 0.25,
+                "close-drop rate $measured/s is more than 25 % from the preset's $expected/s",
+            )
+        }
+    }
+
+    @Test
+    @DisplayName("close drops put transients above anything the sheet alone reaches")
+    fun rainCloseDropsAreAudibleTransients() {
+        val preset = RainPreset.LIGHT
+        val withClose = RenderHarness.renderGenerator(
+            RainGenerator(RenderHarness.SAMPLE_RATE, SEED, preset),
+            seconds = 20.0,
+            warmUpSeconds = 2.0,
+        )
+        val sheetOnly = RenderHarness.renderGenerator(
+            RainGenerator(RenderHarness.SAMPLE_RATE, SEED, preset.copy(closeDropsPerSecond = 0f)),
+            seconds = 20.0,
+            warmUpSeconds = 2.0,
+        )
+        // A single peak sample is far too noisy a statistic for the sheet,
+        // whose amplitude distribution has a long tail. The 99.99th percentile
+        // is stable, and "how much of the signal sits above the sheet's own
+        // 99.99th percentile" is exactly the question - a foreground layer
+        // multiplies it, and nothing else in the generator can.
+        val sheetLoud = percentile(sheetOnly.left, 0.9999)
+        val closeLoud = percentile(withClose.left, 0.9999)
+        val sheetHits = countAbove(sheetOnly.left, sheetLoud)
+        val closeHits = countAbove(withClose.left, sheetLoud)
+        println(
+            "rain p99.99: sheet %.3f, with close drops %.3f; samples above the sheet's p99.99: %d -> %d"
+                .format(sheetLoud, closeLoud, sheetHits, closeHits),
+        )
+        // Removing the close layer makes both of these exactly 1.0, so the
+        // margins below are margins over "feature absent", not over noise.
+        assertTrue(
+            closeLoud > sheetLoud * 1.12f,
+            "close drops only moved the 99.99th percentile from $sheetLoud to $closeLoud",
+        )
+        assertTrue(
+            closeHits > sheetHits * 3,
+            "close drops only produced $closeHits loud samples against the sheet's $sheetHits",
+        )
+        assertTrue(
+            SignalAnalysis.peak(withClose.left) > SignalAnalysis.peak(sheetOnly.left),
+            "close drops did not raise the peak above the sheet's",
+        )
+    }
+
+    @Test
+    @DisplayName("a thunder roll darkens as it decays")
+    fun thunderRollDarkens() {
+        // The bed is trimmed to silence and the crack disabled so the only
+        // thing measured is the roll itself, and the roll is pinned to one
+        // length and one starting cutoff so the slices are deterministic.
+        val preset = ThunderPreset.DEFAULT.copy(
+            firstMinSeconds = 0.5f,
+            firstMaxSeconds = 0.5f,
+            minDurationSeconds = ROLL_SECONDS,
+            maxDurationSeconds = ROLL_SECONDS,
+            minCutoffHz = 200f,
+            maxCutoffHz = 200f,
+            crackProbability = 0f,
+            bedTrim = 0f,
+        )
+        val sweeping = rollTiltDb(ThunderPreset = preset)
+        val flat = rollTiltDb(ThunderPreset = preset.copy(endCutoffFraction = 1f))
+        println(
+            "thunder tilt (last third - first third): sweeping %.2f dB, no sweep %.2f dB"
+                .format(sweeping, flat),
+        )
+        // With the sweep disabled the two windows measure the same filter, so
+        // the control lands near 0 dB; anything clearly negative can only come
+        // from the cutoff having moved.
+        assertTrue(
+            sweeping < -6.0,
+            "the roll's high/low balance only moved $sweeping dB; it is not darkening",
+        )
+        assertTrue(
+            abs(flat) < 2.5,
+            "with the sweep disabled the balance still moved $flat dB - something else is tilting it",
+        )
+    }
+
+    @Test
+    @DisplayName("wind's buffet adds gust-linked energy below 80 Hz")
+    fun windBuffetIsGustLinked() {
+        val seconds = 60.0
+        val withBuffet = RenderHarness.renderGenerator(
+            WindGenerator(RenderHarness.SAMPLE_RATE, SEED),
+            seconds = seconds,
+            warmUpSeconds = 2.0,
+        )
+        val without = RenderHarness.renderGenerator(
+            WindGenerator(RenderHarness.SAMPLE_RATE, SEED, WindPreset.DEFAULT.copy(buffetLevel = 0f)),
+            seconds = seconds,
+            warmUpSeconds = 2.0,
+        )
+        val band = SignalAnalysis.bandLimit(withBuffet.left, withBuffet.sampleRate, 30f, 80f)
+        val bandOff = SignalAnalysis.bandLimit(without.left, without.sampleRate, 30f, 80f)
+        val gainDb = SignalAnalysis.rmsDb(band) - SignalAnalysis.rmsDb(bandOff)
+
+        // Half-second windows: a 30-80 Hz band holds few cycles per window, so
+        // a short one would measure estimator variance rather than gusting.
+        val envelope = SignalAnalysis.rmsEnvelope(band, withBuffet.sampleRate / 2)
+        val sorted = envelope.sorted()
+        val loud = sorted[(sorted.size * 90) / 100]
+        val quiet = sorted[sorted.size / 10]
+        val swingDb = 20.0 * kotlin.math.log10(loud / quiet)
+        println("wind 30-80 Hz: buffet adds %.1f dB, gust swing %.1f dB".format(gainDb, swingDb))
+
+        // Measured with the buffet on: +17.7 dB and a 17.9 dB swing. With
+        // buffetLevel = 0 the band is only the howl's filter skirt, which
+        // gives 0 dB of gain and still swings 11.5 dB (the howl is itself
+        // gust-modulated) - so the swing threshold has to sit above 11.5 to
+        // be a test of the buffet rather than of the howl.
+        assertTrue(gainDb >= 8.0, "the buffet only added $gainDb dB below 80 Hz")
+        assertTrue(swingDb >= 14.0, "the 30-80 Hz band only swings $swingDb dB; it is not gust-linked")
+    }
+
+    @Test
+    @DisplayName("the ocean's second-order body filter keeps crests out of the top octaves")
+    fun oceanBodyRollsOffTheTop() {
+        val capture = RenderHarness.renderGenerator(
+            RenderHarness.generator(SoundId.OCEAN),
+            seconds = 40.0,
+            warmUpSeconds = 2.0,
+        )
+        val sr = capture.sampleRate
+        val low = SignalAnalysis.bandRmsDb(capture.left, sr, 177f, 354f)
+        val eightK = SignalAnalysis.bandRmsDb(capture.left, sr, 5_657f, 11_314f)
+        val sixteenK = SignalAnalysis.bandRmsDb(capture.left, sr, 11_314f, 20_000f)
+        println(
+            "ocean octave bands: 250 Hz %.1f, 8 kHz %.1f, 16 kHz %.1f dBFS".format(
+                low, eightK, sixteenK,
+            ),
+        )
+        // Measured by actually swapping the body filter back to a one pole:
+        // -11.2 dB and -15.7 dB relative to 250 Hz, with 4.5 dB of roll-off
+        // between the two bands. Second order measures -15.2, -28.8 and
+        // 13.6 dB. Every threshold below sits between the two, so a
+        // regression to one pole fails all three of them.
+        val slopePerOctave = eightK - sixteenK
+        println("ocean 8->16 kHz slope: %.1f dB/oct".format(slopePerOctave))
+        assertTrue(eightK - low <= -13.0, "8 kHz is only ${eightK - low} dB below 250 Hz")
+        assertTrue(sixteenK - low <= -25.0, "16 kHz is only ${sixteenK - low} dB below 250 Hz")
+        assertTrue(
+            slopePerOctave >= 10.0,
+            "the body only rolls off $slopePerOctave dB between 8 and 16 kHz; that is one-pole behaviour",
+        )
+    }
+
+    /**
+     * High-band minus low-band energy in the last third of a roll relative to
+     * the first third. Negative means the roll got darker.
+     */
+    private fun rollTiltDb(ThunderPreset: ThunderPreset): Double {
+        val generator = ThunderstormGenerator(RenderHarness.SAMPLE_RATE, SEED, ThunderPreset)
+        val capture = RenderHarness.renderGenerator(generator, seconds = ROLL_SECONDS * 1.6 + 1.0)
+        val sr = capture.sampleRate
+        val start = (0.5 * sr).toInt()
+        val third = (ROLL_SECONDS / 3.0 * sr).toInt()
+        // First third of the event against the tail that follows it, where the
+        // cutoff has finished its sweep and is held down. Comparing the first
+        // and last thirds of the nominal window understates the effect,
+        // because the sweep is still in progress for most of the last third.
+        val first = capture.left.copyOfRange(start, start + third)
+        val tailStart = start + (ROLL_SECONDS * sr).toInt()
+        val last = capture.left.copyOfRange(tailStart, tailStart + third)
+        val firstTilt = tiltDb(first, sr)
+        val lastTilt = tiltDb(last, sr)
+        println("  roll tilt: first third %.1f dB, last third %.1f dB".format(firstTilt, lastTilt))
+        return lastTilt - firstTilt
+    }
+
+    /**
+     * Energy at 150-350 Hz relative to 30-90 Hz, in dB, measured from a Welch
+     * periodogram rather than with band-pass filters: inside a roll the low
+     * band is more than 30 dB louder than the high one, and a 24 dB/oct
+     * filter skirt leaks enough to swamp the reading. FFT bins do not.
+     */
+    private fun tiltDb(slice: FloatArray, @Suppress("UNUSED_PARAMETER") sampleRate: Int): Double =
+        bandRatioDb(SignalAnalysis.welchPsd(slice, 8192), 150.0, 350.0, 30.0, 90.0)
+
+    /** [fraction]-th quantile of |x|, e.g. 0.9999 for the 99.99th percentile. */
+    private fun percentile(x: FloatArray, fraction: Double): Float {
+        val magnitudes = FloatArray(x.size) { abs(x[it]) }
+        magnitudes.sort()
+        return magnitudes[((magnitudes.size - 1) * fraction).toInt()]
+    }
+
+    private fun countAbove(x: FloatArray, threshold: Float): Int {
+        var n = 0
+        for (v in x) if (abs(v) > threshold) n++
+        return n
+    }
+
     private fun renderPsd(id: SoundId): DoubleArray {
         val capture = RenderHarness.renderGenerator(
             RenderHarness.generator(id),
@@ -309,5 +523,6 @@ class NatureGeneratorTest {
 
     private companion object {
         const val SEED = 0x0B0B_0B0BL
+        const val ROLL_SECONDS = 8f
     }
 }
