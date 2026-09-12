@@ -171,3 +171,13 @@ interface PlaybackController {
   controller comes up with defaults, counts the failure (`loadFailures`) and
   never lets the exception reach the application scope, which has no handler.
   `DataStoreStateStore` likewise logs and swallows `IOException` on save.
+
+## Wake lock
+A partial wake lock (`WakeLock` port; `AndroidWakeLock` = `PARTIAL_WAKE_LOCK`)
+is held exactly while the engine renders: acquired right after `engine.start()`
+in `startPlayback`, released right after `engine.stop()` in `pauseInternal`. It
+therefore spans the sleep-timer fade (the engine stops only when the fade
+completes) and a transient-focus-loss/gain cycle, and is released on user
+pause, permanent focus loss, becoming-noisy, timer completion and clearMix.
+The foreground service keeps the process alive; the wake lock keeps the CPU
+feeding audio once the screen is off, which is what lets a mix run overnight.

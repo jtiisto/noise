@@ -40,6 +40,7 @@ class PlaybackFixture(
     val store = FakeStateStore(persisted, loadGate, loadFailure)
     val focus = FakeAudioFocusGate()
     val launcher = FakeServiceLauncher()
+    val wakeLock = FakeWakeLock()
     val clock = VirtualClock(scheduler)
 
     private val scope = CoroutineScope(
@@ -53,6 +54,7 @@ class PlaybackFixture(
         store = store,
         focus = focus,
         serviceLauncher = launcher,
+        wakeLock = wakeLock,
         clock = clock,
         scope = scope,
         mainDispatcher = UnconfinedTestDispatcher(scheduler),

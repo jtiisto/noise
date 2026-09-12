@@ -45,6 +45,22 @@ interface ServiceLauncher {
     fun ensureStarted()
 }
 
+
+/**
+ * A partial wake lock held exactly while the engine is rendering. The
+ * foreground service keeps the *process* alive, but not the CPU: once a phone
+ * enters deep sleep with the screen off the audio thread can be descheduled,
+ * the AudioTrack buffer drains and playback stalls. Holding a partial wake
+ * lock for the duration of playback is what keeps an eight-hour mix going
+ * overnight (the same thing ExoPlayer does via setWakeMode). Both calls are
+ * idempotent; the controller acquires when the engine starts and releases when
+ * it stops, so the lock mirrors playback and is never leaked.
+ */
+interface WakeLock {
+    fun acquire()
+    fun release()
+}
+
 /** Wall-clock source, injected so the sleep timer is testable in virtual time. */
 interface Clock {
     /** Epoch milliseconds. */

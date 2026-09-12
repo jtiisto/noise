@@ -91,6 +91,13 @@ build had ever been run on a device — see docs/reviews.md).
   crashes with `adb logcat -b crash`. Smoke path: launch, add a sound, play,
   allow notifications, add a third sound, confirm `isForeground=true` and no
   FATAL, swipe away and reopen, start a short timer and let it fade out.
+- **`adb install -r` can silently no-op** (leaving a stale APK on the device),
+  which once masked a working fix through several test rounds. Always
+  `adb uninstall` then `adb install`, and assert the installed base.apk md5
+  equals the on-disk APK before trusting any on-device result.
+- Overnight playback holds a `hush:playback` PARTIAL_WAKE_LOCK while the engine
+  renders; confirm with `dumpsys power | sed -n '/Wake Locks:/,/Suspend/p'`
+  (held while playing, gone on pause).
 
 ## Current Status (2026-09-12)
 v0.1.0 complete and reviewed: 16 synthesized sounds, 3-layer mixer, scenes,

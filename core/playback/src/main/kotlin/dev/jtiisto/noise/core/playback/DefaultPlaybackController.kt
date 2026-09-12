@@ -40,6 +40,7 @@ class DefaultPlaybackController(
     private val store: StateStore,
     private val focus: AudioFocusGate,
     private val serviceLauncher: ServiceLauncher,
+    private val wakeLock: WakeLock,
     private val clock: Clock,
     private val scope: CoroutineScope,
     private val mainDispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
@@ -210,6 +211,10 @@ class DefaultPlaybackController(
         engine.setMix(current.mix)
         engine.setMasterVolume(current.masterVolume)
         engine.start()
+        // Held for as long as the engine renders (through any sleep-timer fade,
+        // which stops the engine only when it completes) so the CPU keeps
+        // feeding audio after the screen goes off. Released in pauseInternal.
+        wakeLock.acquire()
         _state.update { it.copy(isPlaying = true) }
 
         // Resuming inside the fade window (e.g. after a phone call) has to
@@ -240,6 +245,7 @@ class DefaultPlaybackController(
         }
         if (_state.value.isPlaying) {
             engine.stop()
+            wakeLock.release()
             _state.update { it.copy(isPlaying = false) }
         }
         if (abandonFocus && holdsFocus) {

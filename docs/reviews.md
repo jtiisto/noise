@@ -70,3 +70,29 @@ tests had never exercised.
 server (KVM), so on-device smoke testing is part of the release gate, not
 optional. This crash would have been caught before shipping by a single launch.
 
+## 2026-09-12 — Overnight-playback gap: no wake lock (fixed in 0.1.2)
+
+User asked whether the app can run indefinitely overnight. The foreground
+service (type mediaPlayback) keeps the *process* alive, but nothing held a
+wake lock — `WAKE_LOCK` was declared and never acquired. Our custom AudioTrack
+engine and stub `SimpleBasePlayer` give none of ExoPlayer's `setWakeMode`
+behaviour, so on deep sleep the render thread can be descheduled and audio
+stalls. (The audio server's own `AudioMix` lock only holds while the track is
+actively mixing — not a guarantee once our thread misses a refill.)
+
+**Fix.** A `WakeLock` port on the controller, held exactly while the engine
+renders: acquired right after `engine.start()` in `startPlayback`, released
+after `engine.stop()` in `pauseInternal`, so it spans the sleep-timer fade and
+survives a focus-loss/gain cycle. `AndroidWakeLock` wraps a non-reference-counted
+`PARTIAL_WAKE_LOCK`. Six unit tests cover every transition (play/pause, focus
+loss+gain, timer fade to completion, clear, focus-denied).
+
+Verified on the emulator: `hush:playback` held (uid=dev.jtiisto.noise) while
+playing, released on pause — after discovering that `adb install -r` had been
+silently not updating the emulator (stale APK), which masked the fix through
+several rounds. Lesson recorded below.
+
+**Tooling lesson.** `adb install -r` can no-op without an error in a combined
+command; always `adb uninstall` then `adb install` and assert the installed
+base.apk md5 matches the on-disk APK before trusting an on-device result.
+

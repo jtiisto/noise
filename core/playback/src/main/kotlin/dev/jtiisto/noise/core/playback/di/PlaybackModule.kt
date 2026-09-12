@@ -5,9 +5,11 @@ import dev.jtiisto.noise.core.playback.Clock
 import dev.jtiisto.noise.core.playback.DefaultPlaybackController
 import dev.jtiisto.noise.core.playback.PlaybackController
 import dev.jtiisto.noise.core.playback.ServiceLauncher
+import dev.jtiisto.noise.core.playback.WakeLock
 import dev.jtiisto.noise.core.playback.StateStore
 import dev.jtiisto.noise.core.playback.android.AndroidAudioFocusGate
 import dev.jtiisto.noise.core.playback.android.AndroidServiceLauncher
+import dev.jtiisto.noise.core.playback.android.AndroidWakeLock
 import dev.jtiisto.noise.core.playback.android.DataStoreStateStore
 import dev.jtiisto.noise.core.playback.android.SystemEpochClock
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +45,7 @@ val playbackModule = module {
     single<StateStore> { DataStoreStateStore(androidContext()) }
     single<AudioFocusGate> { AndroidAudioFocusGate(androidContext()) }
     single<ServiceLauncher> { AndroidServiceLauncher(androidContext()) }
+    single<WakeLock> { AndroidWakeLock(androidContext()) }
 
     // Main.immediate: the controller is main-thread confined, and immediate
     // dispatch keeps UI-originated commands synchronous.
@@ -54,6 +57,7 @@ val playbackModule = module {
             store = get(),
             focus = get(),
             serviceLauncher = get(),
+            wakeLock = get(),
             clock = get(),
             scope = get(ApplicationScope),
         )

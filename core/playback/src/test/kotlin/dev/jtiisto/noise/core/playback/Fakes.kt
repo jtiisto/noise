@@ -152,6 +152,29 @@ class FakeServiceLauncher : ServiceLauncher {
 }
 
 /**
+ * Records wake-lock traffic and, crucially, whether it is currently held, so a
+ * test can assert the lock mirrors playback exactly and is never leaked.
+ */
+class FakeWakeLock : WakeLock {
+    var held = false
+        private set
+    var acquireCount = 0
+        private set
+    var releaseCount = 0
+        private set
+
+    override fun acquire() {
+        acquireCount++
+        held = true
+    }
+
+    override fun release() {
+        releaseCount++
+        held = false
+    }
+}
+
+/**
  * Wall clock pinned to the test scheduler's virtual time, so `advanceTimeBy`
  * moves the sleep timer exactly as much as it moves `delay`.
  */
