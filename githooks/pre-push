@@ -54,9 +54,12 @@ classify() {
     if [[ "$saw_update" == "0" ]]; then decision="skip"; reason="no content updates (deletions only)"; return; fi
     if [[ -z "$changed" ]]; then decision="skip"; reason="no-op: empty net diff vs the remote"; return; fi
 
+    # Docs, prebuilt artifacts and the hooks themselves don't affect the unit
+    # suite, coverage or the screenshot references, so a push touching only
+    # those skips the heavy gate.
     local non_docs
-    non_docs="$(printf '%s\n' "$changed" | grep -vE '(\.md$|^specs/|^docs/)' || true)"
-    if [[ -z "$non_docs" ]]; then decision="docs"; reason="docs-only (*.md / specs/ / docs/)"; return; fi
+    non_docs="$(printf '%s\n' "$changed" | grep -vE '(\.md$|^specs/|^docs/|^dist/|\.apk$|^githooks/)' || true)"
+    if [[ -z "$non_docs" ]]; then decision="docs"; reason="docs / prebuilt-artifact / hooks only"; return; fi
 
     decision="full"; reason="code/other changes present"
 }

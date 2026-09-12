@@ -33,6 +33,16 @@ network.
   allocation-free, the UI motion budget is tiny, and the release build is
   R8-shrunk.
 
+## Download
+
+Grab the latest signed APK: **[`dist/hush-0.1.3.apk`](dist/hush-0.1.3.apk?raw=1)**
+(1.7 MB, Android 8.0+), or from the
+[Releases page](../../releases/latest).
+
+To install: allow "install unknown apps" for your browser or file manager, open
+the APK, and tap install. Upgrades install in place. Then exclude Hush from
+battery optimization so playback runs uninterrupted overnight.
+
 ## Sounds
 
 | Category | Sounds |
