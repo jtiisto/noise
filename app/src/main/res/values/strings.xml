@@ -1,4 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Hush</string>
+    <string name="wordmark">Hush</string>
+
+    <!-- Header -->
+    <string name="timer_idle">Timer</string>
+    <string name="cd_timer_idle">Sleep timer, off. Opens the sleep timer.</string>
+    <string name="cd_timer_running">Sleep timer, %1$d minutes left. Opens the sleep timer.</string>
+    <string name="cd_settings">Settings</string>
+
+    <!-- Orb and status -->
+    <string name="cd_play">Play</string>
+    <string name="cd_pause">Pause</string>
+    <string name="mix_empty_title">Choose a sound</string>
+    <string name="status_empty">Layer up to three sounds</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_playing">Playing</string>
+    <string name="status_playing_timer">Playing · sleep timer %1$d min</string>
+    <string name="status_fading">Fading out · %1$s</string>
+    <string name="status_ducked">Playing quietly · another app is speaking</string>
+
+    <!-- Mix card -->
+    <string name="mix_card_title">In the mix</string>
+    <string name="mix_clear">Clear</string>
+    <string name="cd_remove_layer">Remove %1$s from the mix</string>
+    <string name="cd_layer_volume">%1$s volume</string>
+
+    <!-- Scenes -->
+    <string name="scenes_header">Scenes</string>
+
+    <!-- Catalog -->
+    <string name="catalog_section_noise">Noise</string>
+    <string name="catalog_section_nature">Nature</string>
+    <string name="catalog_section_ambience">Ambience</string>
+    <string name="cd_sound_tile">%1$s. Tap to add or remove, long press for details.</string>
+    <string name="snackbar_max_layers">Up to three sounds at once</string>
+
+    <!-- Bottom bar -->
+    <string name="master_volume">Master volume</string>
+
+    <!-- Sound detail sheet -->
+    <string name="sound_add">Add to mix</string>
+    <string name="sound_remove">Remove from mix</string>
+    <string name="sound_mix_full">The mix is full — remove a sound first</string>
+    <string name="sound_volume">Volume</string>
+
+    <!-- Timer sheet -->
+    <string name="timer_title">Sleep timer</string>
+    <string name="timer_subtitle">Hush fades out and stops on its own.</string>
+    <string name="timer_custom">Custom</string>
+    <string name="cd_timer_custom_length">Custom timer length in minutes</string>
+    <string name="timer_fade_label">Fade out over</string>
+    <string name="timer_start">Start timer</string>
+    <string name="timer_update">Update timer</string>
+    <string name="timer_cancel">Cancel timer</string>
+    <string name="timer_running_note">%1$s left</string>
+    <string name="cd_timer_preset">%1$s timer</string>
+
+    <!-- Settings sheet -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_mix_with_others">Mix with other apps</string>
+    <string name="settings_mix_with_others_note">Keep playing underneath an audiobook or podcast instead of taking over the audio.</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Hush %1$s</string>
+    <string name="settings_synthesis_note">Every sound is synthesized on your phone as it plays. Nothing is recorded, bundled or downloaded.</string>
+    <string name="settings_licences">Open-source licences</string>
+    <string name="settings_licences_body">Jetpack Compose, AndroidX and Material Icons — Apache License 2.0\nAndroidX Media3 — Apache License 2.0\nKotlin and kotlinx.coroutines — Apache License 2.0\nKoin — Apache License 2.0</string>
+
+    <!-- Permissions -->
+    <string name="notifications_denied">Playback controls will not appear in your notifications.</string>
+
+    <!-- Generic -->
+    <string name="close">Close</string>
+    <string name="cd_close_sheet">Close sheet</string>
 </resources>

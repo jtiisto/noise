@@ -1,39 +1,70 @@
 package dev.jtiisto.noise
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import dev.jtiisto.noise.ui.home.HomeScreen
+import dev.jtiisto.noise.ui.home.HomeViewModel
 import dev.jtiisto.noise.ui.theme.HushTheme
+import org.koin.androidx.compose.koinViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Transparent bars with light icons — the app is dark-only.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         setContent {
             HushTheme {
-                Placeholder()
+                HushApp()
             }
         }
     }
 }
 
 @Composable
-fun Placeholder() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Hush")
+private fun HushApp() {
+    val viewModel: HomeViewModel = koinViewModel()
+    val context = LocalContext.current
+
+    // Asked once per process, the first time the user does something that will
+    // make sound. Playback never waits on the answer.
+    var permissionRequested by rememberSaveable { mutableStateOf(false) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (!granted) viewModel.postMessage(R.string.notifications_denied)
     }
+
+    HomeScreen(
+        viewModel = viewModel,
+        onPlaybackRequested = {
+            if (!permissionRequested && needsNotificationPermission(context)) {
+                permissionRequested = true
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        },
+    )
 }
 
-@Preview
-@Composable
-private fun PlaceholderPreview() {
-    HushTheme { Placeholder() }
-}
+private fun needsNotificationPermission(context: android.content.Context): Boolean =
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        PackageManager.PERMISSION_GRANTED
