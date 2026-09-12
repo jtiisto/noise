@@ -4,8 +4,8 @@
     <string name="wordmark">Hush</string>
 
     <!-- Header -->
-    <string name="timer_idle">Timer</string>
-    <string name="cd_timer_idle">Sleep timer, off. Opens the sleep timer.</string>
+    <string name="timer_none">No timer</string>
+    <string name="cd_timer_none">No sleep timer — playing until cancelled. Opens the sleep timer.</string>
     <string name="cd_timer_running">Sleep timer, %1$d minutes left. Opens the sleep timer.</string>
     <string name="cd_settings">Settings</string>
 
@@ -17,6 +17,7 @@
     <string name="status_paused">Paused</string>
     <string name="status_playing">Playing</string>
     <string name="status_playing_timer">Playing · sleep timer %1$d min</string>
+    <string name="status_playing_until_cancelled">Playing · until cancelled</string>
     <string name="status_fading">Fading out · %1$s</string>
     <string name="status_ducked">Playing quietly · another app is speaking</string>
 
@@ -48,11 +49,15 @@
     <!-- Timer sheet -->
     <string name="timer_title">Sleep timer</string>
     <string name="timer_subtitle">Hush fades out and stops on its own.</string>
+    <string name="timer_subtitle_until_cancelled">Hush keeps playing until you stop it.</string>
+    <string name="timer_until_cancelled">Until cancelled</string>
     <string name="timer_custom">Custom</string>
     <string name="cd_timer_custom_length">Custom timer length in minutes</string>
     <string name="timer_fade_label">Fade out over</string>
     <string name="timer_start">Start timer</string>
     <string name="timer_update">Update timer</string>
+    <string name="timer_play_until_cancelled">Play until cancelled</string>
+    <string name="timer_keep_playing">Keep playing</string>
     <string name="timer_cancel">Cancel timer</string>
     <string name="timer_running_note">%1$s left</string>
     <string name="cd_timer_preset">%1$s timer</string>

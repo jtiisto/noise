@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeDown
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
@@ -240,12 +241,17 @@ fun HomeScreen(
         HomeSheet.None -> Unit
         HomeSheet.Timer -> TimerSheet(
             isRunning = timer != null,
+            isPlaying = state.isPlaying,
             remainingMillis = timer?.remainingMillis,
             settings = state.settings,
             accent = palette.value.accent,
             onStart = { minutes ->
                 onPlaybackRequested()
                 actions.onStartTimer(minutes)
+            },
+            onPlayUntilCancelled = {
+                onPlaybackRequested()
+                actions.onPlayUntilCancelled()
             },
             onCancel = actions::onCancelTimer,
             onFadeSecondsChange = actions::onFadeSecondsChange,
@@ -308,7 +314,7 @@ private fun TimerPill(timer: TimerState?, accent: Color, onClick: () -> Unit) {
     val description = if (timer != null) {
         context.getString(R.string.cd_timer_running, remainingMinutes(timer.remainingMillis))
     } else {
-        stringResource(R.string.cd_timer_idle)
+        stringResource(R.string.cd_timer_none)
     }
 
     Row(
@@ -327,15 +333,18 @@ private fun TimerPill(timer: TimerState?, accent: Color, onClick: () -> Unit) {
             .padding(horizontal = HushSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // The pill always states the current mode, so "no timer" reads as a
+        // deliberate choice rather than an absence: a moon and a countdown
+        // while one runs, the infinity glyph and "No timer" while none does.
         Icon(
-            imageVector = Icons.Rounded.Bedtime,
+            imageVector = if (running) Icons.Rounded.Bedtime else Icons.Rounded.AllInclusive,
             contentDescription = null,
             tint = if (running) accent else HushColor.TextTertiary,
             modifier = Modifier.size(15.dp),
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            text = if (timer != null) formatCountdown(timer.remainingMillis) else stringResource(R.string.timer_idle),
+            text = if (timer != null) formatCountdown(timer.remainingMillis) else stringResource(R.string.timer_none),
             style = MaterialTheme.typography.labelMedium,
             color = if (running) HushColor.TextPrimary else HushColor.TextSecondary,
         )
@@ -347,15 +356,17 @@ private fun TimerPill(timer: TimerState?, accent: Color, onClick: () -> Unit) {
 private fun NowPlayingText(state: PlaybackState) {
     val timer = state.timer
     val title = state.mix.title(stringResource(R.string.mix_empty_title))
-    val status = when {
-        state.mix.isEmpty -> stringResource(R.string.status_empty)
-        !state.isPlaying -> stringResource(R.string.status_paused)
-        timer != null && timer.isFading ->
-            stringResource(R.string.status_fading, formatCountdown(timer.remainingMillis))
-        timer != null ->
-            stringResource(R.string.status_playing_timer, remainingMinutes(timer.remainingMillis))
-        state.isDucked -> stringResource(R.string.status_ducked)
-        else -> stringResource(R.string.status_playing)
+    // Which of the six the app is doing is decided by a pure function; this
+    // only turns the answer into words.
+    val status = when (playbackStatus(state)) {
+        PlaybackStatus.EMPTY -> stringResource(R.string.status_empty)
+        PlaybackStatus.PAUSED -> stringResource(R.string.status_paused)
+        PlaybackStatus.FADING ->
+            stringResource(R.string.status_fading, formatCountdown(timer!!.remainingMillis))
+        PlaybackStatus.TIMER ->
+            stringResource(R.string.status_playing_timer, remainingMinutes(timer!!.remainingMillis))
+        PlaybackStatus.DUCKED -> stringResource(R.string.status_ducked)
+        PlaybackStatus.UNTIL_CANCELLED -> stringResource(R.string.status_playing_until_cancelled)
     }
 
     Column(

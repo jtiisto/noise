@@ -37,9 +37,11 @@
 ## Screens
 ### Home (single screen, vertical scroll)
 1. **Header** — "Hush" wordmark (small caps, tracked), right side: timer
-   pill (a crescent-moon glyph plus `27:31` counting down when a timer runs,
-   "Timer" otherwise; accent-tinted while running; tap → timer sheet),
-   settings icon.
+   pill, settings icon. The pill always states the current mode rather than
+   naming a screen, so "no timer" reads as a deliberate choice and not an
+   absence: a crescent moon plus `27:31`, accent-tinted, while a timer runs;
+   an infinity glyph plus "No timer", quiet, while none does. Tap → timer
+   sheet either way.
 2. **Orb** — centred 168 dp circular play/pause control with layered rings
    (three concentric translucent circles tinted by the mix hue; outer ring
    pulses while playing). It is drawn inside a 200 dp box so the halo behind
@@ -47,9 +49,12 @@
    edge of the control. Below it the mix title (`Mix.title()` — e.g.
    "Rain + Brown noise", or "Choose a sound" when empty) and a status line:
    "Playing · sleep timer 27 min" / "Fading out · 0:32" / "Playing quietly ·
-   another app is speaking" (ducked) / "Playing" / "Paused" / "Layer up to
-   three sounds" when the mix is empty. The minutes in the status line are
-   floored so they agree with the countdown pill beside them.
+   another app is speaking" (ducked) / "Playing · until cancelled" (playing
+   with no timer) / "Paused" / "Layer up to three sounds" when the mix is
+   empty. The minutes are floored so they agree with the countdown pill
+   beside them. Which of the six wins when several are true at once is a pure
+   function (`ui/home/playbackStatus`), unit tested; the composable only
+   turns its answer into words.
 3. **Mix card** (only when the mix is non-empty) — one row per layer, in two
    lines: icon, name and percentage on the first, a full-width accent-tinted
    volume slider on the second with the remove × at its right. (The × shares
@@ -76,16 +81,30 @@
    scroll under it and stay legible (there is no blur available).
 
 ### Sleep timer sheet (modal bottom sheet)
-- Preset chips 15 / 30 / 45 / 60 / 90 / 120 min, all labelled "N min" so the
-  grid stays scannable (last used pre-selected); "Custom" reveals a slider
-  5–480 min in 5-min steps with a large readout that does spell out hours
-  ("3 h 20 min").
-- "Fade out over" segmented: 15s / 30s / 45s / 60s / 2 min.
+The sheet answers one question — "how long?" — and its three kinds of answer
+form a single list, bracketed by two full-width rows:
+- **"Until cancelled"** (infinity leading icon) heads the list: no timer at
+  all. Pre-selected when `settings.prefersUntilCancelled` and no timer is
+  running — a running timer always wins the initial selection, since showing
+  "Until cancelled" above a live countdown would be a lie.
+- Preset chips 15 / 30 / 45 / 60 / 90 / 120 min in a 3 × 2 grid, all labelled
+  "N min" so the grid stays scannable (last used pre-selected).
+- **"Custom"** closes the list and reveals a slider 5–480 min in 5-min steps
+  with a large readout that does spell out hours ("3 h 20 min").
+- "Fade out over" segmented: 15s / 30s / 45s / 60s / 2 min — hidden while
+  "Until cancelled" is selected, because nothing fades when nothing is going
+  to stop. It is still reachable in Settings (same shared value).
 - The chosen length lives in the sheet, not the ViewModel: it is a draft that
-  only means anything once "Start timer" is pressed.
-- Primary button "Start timer" (or "Update" if running) + "Cancel timer" when
-  running. Starting the timer also starts playback if the mix is non-empty and
-  paused.
+  only means anything once the primary button is pressed.
+- Primary button, by state: "Play until cancelled" / "Keep playing" when
+  already playing (the button is then confirming a mode, not starting one) /
+  "Update timer" when one is running / "Start timer" otherwise. It calls
+  `playUntilCancelled()` or `startTimer(minutes)` accordingly; either also
+  starts playback if the mix is non-empty and paused. "Cancel timer" appears
+  below it only while a timer runs.
+- The subtitle follows the choice: the countdown while a timer runs, "Hush
+  keeps playing until you stop it." under "Until cancelled", "Hush fades out
+  and stops on its own." otherwise.
 
 ### Settings sheet
 - Mix with other apps (switch + one-line explanation).
@@ -118,8 +137,10 @@
 ## Screenshot tests (`app/src/screenshotTest`)
 `@PreviewTest` previews via `FakePlaybackController`, on a 360 × 780 phone
 frame unless noted: empty mix (idle), playing 3-layer mix with a running
-timer, paused 1-layer mix, timer sheet (running) and timer sheet with the
-custom slider open, settings sheet, catalog long-press sheet in the mix, and
+timer, playing 2-layer mix with no timer (the "No timer" pill and the
+"until cancelled" status line), paused 1-layer mix, timer sheet (running),
+timer sheet with "Until cancelled" selected, timer sheet with the custom
+slider open, settings sheet, catalog long-press sheet in the mix, and
 — at 320 × 640, to prove the smallest supported screen — the playing home
 screen, the long-press sheet for a sound the full mix has no room for, and
 one catalog section (the three-column grid with the longest labels in it).

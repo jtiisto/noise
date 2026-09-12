@@ -51,6 +51,9 @@ interface HomeActions {
     fun onSheetDismiss()
 
     fun onStartTimer(minutes: Int)
+
+    /** Drop any sleep timer and keep playing until the user stops it. */
+    fun onPlayUntilCancelled()
     fun onCancelTimer()
     fun onFadeSecondsChange(seconds: Int)
     fun onMixWithOtherAppsChange(enabled: Boolean)

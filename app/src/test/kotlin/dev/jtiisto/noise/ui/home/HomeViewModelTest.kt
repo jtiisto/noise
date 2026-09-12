@@ -158,6 +158,39 @@ class HomeViewModelTest {
     }
 
     @Test
+    fun `choosing until cancelled closes the sheet and drops the timer`() {
+        val (vm, controller) = viewModel(PlaybackState(mix = Mix.of(SoundId.RAIN to 0.5f)))
+        vm.onStartTimer(30)
+        vm.onTimerPillClick()
+
+        vm.onPlayUntilCancelled()
+
+        assertEquals(HomeSheet.None, vm.uiState.sheet)
+        assertNull(controller.state.value.timer)
+        assertTrue(controller.state.value.isPlaying)
+    }
+
+    @Test
+    fun `the until-cancelled choice is remembered so the sheet reopens on it`() {
+        val (vm, controller) = viewModel(PlaybackState(mix = Mix.of(SoundId.RAIN to 0.5f)))
+
+        vm.onPlayUntilCancelled()
+
+        assertTrue(controller.state.value.settings.prefersUntilCancelled)
+    }
+
+    @Test
+    fun `picking a length afterwards goes back to a real timer`() {
+        val (vm, controller) = viewModel(PlaybackState(mix = Mix.of(SoundId.RAIN to 0.5f)))
+        vm.onPlayUntilCancelled()
+
+        vm.onStartTimer(45)
+
+        assertFalse(controller.state.value.settings.prefersUntilCancelled)
+        assertEquals(45 * 60_000L, controller.state.value.timer?.totalMillis)
+    }
+
+    @Test
     fun `settings changes go straight through to the controller`() {
         val (vm, controller) = viewModel()
 

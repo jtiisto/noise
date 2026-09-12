@@ -43,6 +43,14 @@ fun HomePlayingThreeLayers() {
     HomeScreenPreview(PreviewStates.playingTrio)
 }
 
+/** Playing with nothing set to stop it: "No timer" pill, "until cancelled" status. */
+@PreviewTest
+@Preview(widthDp = PHONE_WIDTH, heightDp = PHONE_HEIGHT, showBackground = true, backgroundColor = NIGHT)
+@Composable
+fun HomePlayingUntilCancelled() {
+    HomeScreenPreview(PreviewStates.playingUntilCancelled)
+}
+
 @PreviewTest
 @Preview(widthDp = PHONE_WIDTH, heightDp = PHONE_HEIGHT, showBackground = true, backgroundColor = NIGHT)
 @Composable
@@ -79,10 +87,37 @@ fun TimerSheetRunning() {
     SheetPreviewFrame(state.mix) {
         TimerSheetContent(
             isRunning = true,
+            isPlaying = true,
             remainingMillis = state.timer?.remainingMillis,
             settings = state.settings,
             accent = mixPalette(state.mix).accent,
             onStart = {},
+            onPlayUntilCancelled = {},
+            onCancel = {},
+            onFadeSecondsChange = {},
+        )
+    }
+}
+
+/**
+ * The indefinite mode: "Until cancelled" heads the list, the fade control is
+ * gone (nothing fades when nothing stops) and the primary button offers to
+ * start playing rather than to start a timer.
+ */
+@PreviewTest
+@Preview(widthDp = PHONE_WIDTH, heightDp = PHONE_HEIGHT, showBackground = true, backgroundColor = NIGHT)
+@Composable
+fun TimerSheetUntilCancelled() {
+    val mix = PreviewStates.pausedSingle.mix
+    SheetPreviewFrame(mix) {
+        TimerSheetContent(
+            isRunning = false,
+            isPlaying = false,
+            remainingMillis = null,
+            settings = PlaybackSettings(lastTimerMinutes = PlaybackSettings.TIMER_UNTIL_CANCELLED),
+            accent = mixPalette(mix).accent,
+            onStart = {},
+            onPlayUntilCancelled = {},
             onCancel = {},
             onFadeSecondsChange = {},
         )
@@ -97,10 +132,12 @@ fun TimerSheetCustomLength() {
     SheetPreviewFrame(mix) {
         TimerSheetContent(
             isRunning = false,
+            isPlaying = false,
             remainingMillis = null,
             settings = PlaybackSettings(fadeOutSeconds = 30, lastTimerMinutes = 200),
             accent = mixPalette(mix).accent,
             onStart = {},
+            onPlayUntilCancelled = {},
             onCancel = {},
             onFadeSecondsChange = {},
         )

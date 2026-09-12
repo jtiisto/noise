@@ -9,6 +9,14 @@ night in the background with lock-screen controls.
 Everything is synthesized on the phone: no recordings, no downloads, no
 network, no accounts, no analytics. Built for modest hardware (Android 8.0+).
 
+## Screens
+| Home | Playing a mix | Sleep timer | Settings |
+|---|---|---|---|
+| ![Home](docs/screenshots/home-idle.png) | ![Playing](docs/screenshots/home-playing.png) | ![Timer](docs/screenshots/timer-sheet.png) | ![Settings](docs/screenshots/settings-sheet.png) |
+
+Rendered by the JVM screenshot tests (`./gradlew updateDebugScreenshotTest`); the
+same images are the committed references under `app/src/screenshotTestDebug/`.
+
 ## Build
 ```
 ./gradlew assembleDebug            # app/build/outputs/apk/debug/app-debug.apk

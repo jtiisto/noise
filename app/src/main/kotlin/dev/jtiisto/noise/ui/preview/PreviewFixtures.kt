@@ -64,6 +64,15 @@ object PreviewStates {
         settings = PlaybackSettings(fadeOutSeconds = 45, lastTimerMinutes = 45),
     )
 
+    /** Playing with no sleep timer — the indefinite mode. */
+    val playingUntilCancelled = PlaybackState(
+        mix = Mix.of(SoundId.CAMPFIRE to 0.7f, SoundId.WIND to 0.3f),
+        isPlaying = true,
+        masterVolume = 0.7f,
+        timer = null,
+        settings = PlaybackSettings(lastTimerMinutes = PlaybackSettings.TIMER_UNTIL_CANCELLED),
+    )
+
     /** One layer, paused. */
     val pausedSingle = PlaybackState(
         mix = Mix.of(SoundId.OCEAN to 0.82f),

@@ -61,6 +61,7 @@ fun HushChip(
     onClick: () -> Unit,
     accent: Color,
     modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null,
 ) {
     val spec = remember { tween<Color>(SELECTION_ANIM_MILLIS) }
     val container by animateColorAsState(
@@ -99,6 +100,15 @@ fun HushChip(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (leadingIcon != null) {
+            Icon(
+                imageVector = leadingIcon,
+                contentDescription = null,
+                tint = if (selected) accent else content,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(Modifier.width(HushSpacing.sm))
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,

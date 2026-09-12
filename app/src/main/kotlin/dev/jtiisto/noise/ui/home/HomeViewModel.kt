@@ -72,6 +72,11 @@ class HomeViewModel(
         onSheetDismiss()
     }
 
+    override fun onPlayUntilCancelled() {
+        controller.playUntilCancelled()
+        onSheetDismiss()
+    }
+
     override fun onCancelTimer() {
         controller.cancelTimer()
         onSheetDismiss()

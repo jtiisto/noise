@@ -1,20 +1,22 @@
 package dev.jtiisto.noise.di
 
-import dev.jtiisto.noise.core.playback.PlaybackController
+import dev.jtiisto.noise.core.audio.AudioEngine
+import dev.jtiisto.noise.core.audio.AudioTrackEngine
+import dev.jtiisto.noise.core.audio.EngineConfig
 import dev.jtiisto.noise.ui.home.HomeViewModel
-import dev.jtiisto.noise.ui.preview.FakePlaybackController
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 /**
- * The app module: UI-facing bindings only.
- *
- * The `PlaybackController` binding below is a placeholder so the UI can run
- * standalone. It has no audio, no service and no clock.
+ * The app module: the one binding the playback module leaves to the app (the
+ * engine, whose implementation and tuning live in `core/audio`) plus the
+ * UI-facing ViewModel. `PlaybackController` itself comes from `playbackModule`.
  */
 val appModule = module {
-    // TODO(integration): replaced by playbackModule + AudioTrackEngine binding
-    single<PlaybackController> { FakePlaybackController() }
+    // One engine for the process lifetime: it owns the audio thread and the
+    // generator state, and the controller restores playback through it at
+    // start-up before any UI exists.
+    single<AudioEngine> { AudioTrackEngine(EngineConfig()) }
 
     viewModel { HomeViewModel(controller = get()) }
 }

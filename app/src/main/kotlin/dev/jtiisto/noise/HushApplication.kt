@@ -1,6 +1,7 @@
 package dev.jtiisto.noise
 
 import android.app.Application
+import dev.jtiisto.noise.core.playback.di.playbackModule
 import dev.jtiisto.noise.di.appModule
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -13,9 +14,10 @@ class HushApplication : Application() {
         startKoin {
             androidLogger(Level.ERROR)
             androidContext(this@HushApplication)
-            // TODO(integration): add playbackModule (and the audio module) here;
-            // appModule then keeps only the ViewModel binding.
-            modules(appModule)
+            // appModule binds the AudioEngine that playbackModule requires; the
+            // controller is created at start so a process restarted by the
+            // sticky service resumes playback without waiting for the UI.
+            modules(appModule, playbackModule)
         }
     }
 }

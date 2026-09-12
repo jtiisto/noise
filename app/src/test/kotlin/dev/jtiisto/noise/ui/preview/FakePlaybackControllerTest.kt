@@ -152,6 +152,44 @@ class FakePlaybackControllerTest {
     }
 
     @Test
+    fun `playing until cancelled drops the timer, remembers the choice and starts`() {
+        val controller = FakePlaybackController(PlaybackState(mix = Mix.of(rain to 0.5f)))
+        controller.startTimer(30)
+
+        controller.playUntilCancelled()
+
+        assertNull(controller.state.value.timer)
+        assertTrue(controller.state.value.isPlaying)
+        assertTrue(controller.state.value.settings.prefersUntilCancelled)
+        assertEquals(
+            PlaybackSettings.TIMER_UNTIL_CANCELLED,
+            controller.state.value.settings.lastTimerMinutes,
+        )
+    }
+
+    @Test
+    fun `playing until cancelled still cannot start an empty mix`() {
+        val controller = FakePlaybackController()
+
+        controller.playUntilCancelled()
+
+        assertFalse(controller.state.value.isPlaying)
+        // The preference is still remembered, so the sheet opens on it next time.
+        assertTrue(controller.state.value.settings.prefersUntilCancelled)
+    }
+
+    @Test
+    fun `starting a timer again clears the until-cancelled preference`() {
+        val controller = FakePlaybackController(PlaybackState(mix = Mix.of(rain to 0.5f)))
+        controller.playUntilCancelled()
+
+        controller.startTimer(60)
+
+        assertFalse(controller.state.value.settings.prefersUntilCancelled)
+        assertEquals(60, controller.state.value.settings.lastTimerMinutes)
+    }
+
+    @Test
     fun `cancelling clears the timer but leaves playback alone`() {
         val controller = FakePlaybackController(PlaybackState(mix = Mix.of(rain to 0.5f)))
         controller.startTimer(30)
