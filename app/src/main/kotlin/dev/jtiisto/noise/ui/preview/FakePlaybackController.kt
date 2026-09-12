@@ -98,6 +98,16 @@ class FakePlaybackController(
         _state.update { it.copy(timer = null) }
     }
 
+    override fun playUntilCancelled() {
+        _state.update { current ->
+            current.copy(
+                isPlaying = current.isPlaying || !current.mix.isEmpty,
+                settings = current.settings.copy(lastTimerMinutes = PlaybackSettings.TIMER_UNTIL_CANCELLED),
+                timer = null,
+            )
+        }
+    }
+
     override fun updateSettings(transform: (PlaybackSettings) -> PlaybackSettings) {
         _state.update { current ->
             val settings = transform(current.settings)

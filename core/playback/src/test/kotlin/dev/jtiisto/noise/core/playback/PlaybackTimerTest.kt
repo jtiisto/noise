@@ -1,5 +1,6 @@
 package dev.jtiisto.noise.core.playback
 
+import dev.jtiisto.noise.core.model.Mix
 import dev.jtiisto.noise.core.model.SoundId
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -34,6 +35,45 @@ class PlaybackTimerTest {
 
         f.controller.startTimer(1)
         assertEquals(PlaybackSettings.TIMER_MIN_MINUTES, f.state.settings.lastTimerMinutes)
+    }
+
+    @Test
+    fun `playUntilCancelled clears the timer, remembers the choice and plays`() = playbackTest { f ->
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(30)
+        assertNotNull(f.state.timer)
+
+        f.controller.playUntilCancelled()
+
+        assertNull(f.state.timer)
+        assertTrue(f.state.isPlaying)
+        assertEquals(PlaybackSettings.TIMER_UNTIL_CANCELLED, f.state.settings.lastTimerMinutes)
+        assertTrue(f.state.settings.prefersUntilCancelled)
+        assertEquals(1, f.engine.startCount)
+        assertEquals(PlaybackSettings.TIMER_UNTIL_CANCELLED, checkNotNull(f.store.last).settings.lastTimerMinutes)
+    }
+
+    @Test
+    fun `playUntilCancelled during the fade restores gain and keeps playing`() = playbackTest { f ->
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(5)
+        advanceThrough(5 * minute - 30_000L) // inside the 45 s fade window
+        assertEquals(1, f.engine.fadeStartCount)
+
+        f.controller.playUntilCancelled()
+
+        assertEquals(1, f.engine.cancelFadeCount)
+        assertNull(f.state.timer)
+        assertTrue(f.state.isPlaying)
+    }
+
+    @Test
+    fun `playUntilCancelled with an empty mix only records the preference`() = playbackTest { f ->
+        f.controller.playUntilCancelled()
+
+        assertFalse(f.state.isPlaying)
+        assertEquals(0, f.engine.startCount)
+        assertEquals(PlaybackSettings.TIMER_UNTIL_CANCELLED, f.state.settings.lastTimerMinutes)
     }
 
     @Test

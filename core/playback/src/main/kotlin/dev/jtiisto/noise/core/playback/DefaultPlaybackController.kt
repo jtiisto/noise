@@ -134,6 +134,15 @@ class DefaultPlaybackController(
         persistNow()
     }
 
+    override fun playUntilCancelled() = dispatch {
+        _state.update {
+            it.copy(settings = it.settings.copy(lastTimerMinutes = PlaybackSettings.TIMER_UNTIL_CANCELLED))
+        }
+        stopTimer(cancelFade = true)
+        startPlayback()
+        persistNow()
+    }
+
     override fun updateSettings(transform: (PlaybackSettings) -> PlaybackSettings) = dispatch {
         val next = transform(_state.value.settings)
         if (next == _state.value.settings) return@dispatch

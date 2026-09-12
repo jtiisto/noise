@@ -31,5 +31,13 @@ interface PlaybackController {
     fun startTimer(minutes: Int)
     fun cancelTimer()
 
+    /**
+     * Indefinite playback: cancels any sleep timer, remembers
+     * [PlaybackSettings.TIMER_UNTIL_CANCELLED] as the last timer choice, and
+     * starts playback if the mix is non-empty. The mix then plays until the
+     * user pauses it.
+     */
+    fun playUntilCancelled()
+
     fun updateSettings(transform: (PlaybackSettings) -> PlaybackSettings)
 }

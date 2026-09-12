@@ -106,7 +106,7 @@ class PersistedStateCodecTest {
             preferencesOf(
                 PersistedStateCodec.MASTER_VOLUME to 4f,
                 PersistedStateCodec.FADE_OUT_SECONDS to 9_000,
-                PersistedStateCodec.LAST_TIMER_MINUTES to 0,
+                PersistedStateCodec.LAST_TIMER_MINUTES to 2,
                 PersistedStateCodec.TIMER_END_AT to -5L,
                 PersistedStateCodec.TIMER_TOTAL_MS to -1L,
             ),
@@ -117,6 +117,19 @@ class PersistedStateCodecTest {
         assertEquals(PlaybackSettings.TIMER_MIN_MINUTES, decoded.settings.lastTimerMinutes)
         assertEquals(0L, decoded.timerEndAtEpochMillis)
         assertEquals(0L, decoded.timerTotalMillis)
+    }
+
+    @Test
+    fun `zero timer minutes is the until-cancelled choice and survives a round-trip`() {
+        val decoded = PersistedStateCodec.decode(
+            preferencesOf(PersistedStateCodec.LAST_TIMER_MINUTES to PlaybackSettings.TIMER_UNTIL_CANCELLED),
+        )
+        assertEquals(PlaybackSettings.TIMER_UNTIL_CANCELLED, decoded.settings.lastTimerMinutes)
+        assertTrue(decoded.settings.prefersUntilCancelled)
+
+        val encoded = mutablePreferencesOf()
+        PersistedStateCodec.encode(decoded, encoded)
+        assertEquals(PlaybackSettings.TIMER_UNTIL_CANCELLED, encoded[PersistedStateCodec.LAST_TIMER_MINUTES])
     }
 
     @Test

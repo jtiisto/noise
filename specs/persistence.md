@@ -9,7 +9,7 @@ a pure mapping):
 | `master_volume` | Float | 0..1 |
 | `fade_out_seconds` | Int | sleep-timer fade window |
 | `mix_with_other_apps` | Boolean | skip audio focus |
-| `last_timer_minutes` | Int | pre-selected preset |
+| `last_timer_minutes` | Int | pre-selected preset; `0` = "until cancelled" (no timer) |
 | `was_playing` | Boolean | resume after process death |
 | `timer_end_at` | Long | epoch ms; 0 = none |
 | `timer_total_ms` | Long | for progress; 0 = none |

@@ -52,8 +52,10 @@ object PersistedStateCodec {
             fadeOutSeconds = preferences.readOrNull(FADE_OUT_SECONDS)?.coerceIn(FADE_RANGE)
                 ?: defaultSettings.fadeOutSeconds,
             mixWithOtherApps = preferences.readOrNull(MIX_WITH_OTHER_APPS) ?: defaultSettings.mixWithOtherApps,
-            lastTimerMinutes = preferences.readOrNull(LAST_TIMER_MINUTES)?.coerceIn(TIMER_RANGE)
-                ?: defaultSettings.lastTimerMinutes,
+            lastTimerMinutes = preferences.readOrNull(LAST_TIMER_MINUTES)?.let { minutes ->
+                // 0 is the "until cancelled" choice, not a too-short timer.
+                if (minutes == PlaybackSettings.TIMER_UNTIL_CANCELLED) minutes else minutes.coerceIn(TIMER_RANGE)
+            } ?: defaultSettings.lastTimerMinutes,
         ),
         wasPlaying = preferences.readOrNull(WAS_PLAYING) ?: defaults.wasPlaying,
         timerEndAtEpochMillis = preferences.readOrNull(TIMER_END_AT)?.coerceAtLeast(0L)

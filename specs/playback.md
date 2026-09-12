@@ -39,6 +39,7 @@ interface PlaybackController {
     fun setMasterVolume(volume: Float)
     fun startTimer(minutes: Int)    // restarts if one is running; remembers lastTimerMinutes
     fun cancelTimer()
+    fun playUntilCancelled()  // clears any timer, remembers lastTimerMinutes = 0, plays if mix non-empty
     fun updateSettings(transform: (PlaybackSettings) -> PlaybackSettings)
 }
 ```
