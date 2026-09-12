@@ -1,37 +1,93 @@
 # Hush
 
-A calm Android sleep-sound app. Layer up to three sounds — coloured noise
-(white, pink, brown, blue, violet, grey) and procedurally synthesized ambience
-(rain, downpour, thunderstorm, ocean, wind, campfire, stream, crickets, fan,
-airplane cabin) — set a sleep timer that fades out gently, and let it run all
-night in the background with lock-screen controls.
+**A calm sleep-sound app for Android.** Layer coloured noise and procedurally
+synthesized ambience, set a gentle sleep timer, and let it run all night with
+lock-screen controls. Every sound is generated on the phone as it plays —
+nothing is recorded, bundled, or downloaded, and the app never touches the
+network.
 
-Everything is synthesized on the phone: no recordings, no downloads, no
-network, no accounts, no analytics. Built for modest hardware (Android 8.0+).
+<p align="center">
+  <img src="docs/screenshots/summer-night.png" alt="Summer night scene — Crickets and Stream playing until cancelled" width="46%">
+  &nbsp;&nbsp;
+  <img src="docs/screenshots/ocean-timer.png" alt="Ocean and Wind playing with a sleep timer counting down" width="46%">
+</p>
 
-## Screens
-| Home | Playing a mix | Sleep timer | Settings |
-|---|---|---|---|
-| ![Home](docs/screenshots/home-idle.png) | ![Playing](docs/screenshots/home-playing.png) | ![Timer](docs/screenshots/timer-sheet.png) | ![Settings](docs/screenshots/settings-sheet.png) |
+## Highlights
 
-Rendered by the JVM screenshot tests (`./gradlew updateDebugScreenshotTest`); the
-same images are the committed references under `app/src/screenshotTestDebug/`.
+- **Everything is synthesized.** Sixteen sounds are generated in real time by a
+  pure-Kotlin DSP engine — no audio files, so the APK is ~1.7 MB and the sounds
+  never loop.
+- **Layer up to three** sounds at once, each with its own volume, over a master
+  volume.
+- **One-tap scenes** — Stormy night, Cabin, Seaside, Deep focus, Summer night,
+  Long haul.
+- **Sleep timer** with presets, a custom length (5–480 min), a gentle
+  equal-power fade-out, and an explicit *until cancelled* mode.
+- **Runs all night in the background** — a media foreground service with
+  lock-screen and headset controls, a wake lock so deep sleep never stalls
+  playback, audio-focus handling (pause on a call, duck for a notification,
+  pause when headphones unplug), and resume after the process is killed.
+- **A night-sky UI** that tints itself with the sounds in the mix, with one
+  quiet breathing animation on the play orb.
+- Built for **modest hardware** (Android 8.0+): the render loop is
+  allocation-free, the UI motion budget is tiny, and the release build is
+  R8-shrunk.
+
+## Sounds
+
+| Category | Sounds |
+|---|---|
+| **Noise** | White · Pink · Brown · Blue · Violet · Grey |
+| **Nature** | Rain · Downpour · Thunderstorm · Ocean · Wind · Campfire · Stream · Crickets |
+| **Ambience** | Fan · Airplane cabin |
+
+Each is tuned by ear and calibrated to a consistent loudness so switching
+sounds never jumps in volume. How every one is built — the filters, the
+event models, the tuning knobs — is written up in
+[`docs/sound-design.md`](docs/sound-design.md).
 
 ## Build
-```
+
+Requires JDK 21 and an Android SDK with platform 37 (`local.properties` →
+`sdk.dir`).
+
+```bash
 ./gradlew assembleDebug            # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleRelease          # signed when local.properties has the hush.* keys (docs/release.md)
-./gradlew testDebugUnitTest koverVerifyAggregated
-./gradlew validateDebugScreenshotTest
-```
-Requires JDK 21 and an Android SDK with platform 37 (`local.properties` → `sdk.dir`).
 
-## Layout
-- `core/model` — sound catalog, mixes, scenes
-- `core/audio` — DSP generators, mixer, `AudioTrack` engine
-- `core/playback` — playback controller, sleep timer, audio focus, persistence, media session service
-- `app` — Compose UI
-- `specs/` — the living specs; `docs/` — architecture, sound design, release, review log
+./gradlew testDebugUnitTest koverVerifyAggregated   # unit suite + coverage gate
+./gradlew validateDebugScreenshotTest               # Compose Preview screenshot references
+```
+
+To hear the sounds without a device, render every one to a WAV for inspection:
+
+```bash
+NOISE_RENDER_DIR=/tmp/hush ./gradlew :core:audio:testDebugUnitTest --tests '*RenderSamples*'
+```
+
+## Architecture
+
+```
+app/            Compose UI (home, mixer, scenes, catalog, timer & settings sheets)
+core/model/     sound catalog, mixes, scenes — pure data
+core/audio/     DSP generators, allocation-free MixRenderer, AudioTrack engine
+core/playback/  PlaybackController, sleep timer, audio focus, wake lock,
+                persistence, Media3 session service
+```
+
+One process-wide `PlaybackController` is the single source of truth; the UI is
+a pure function of its state, and the foreground service and media session only
+mirror it. Android edges (the audio sink, focus, wake lock, persistence) are
+interfaces, so the decision logic is unit-tested with fakes and virtual time.
+
+## Tech
+
+Kotlin · Jetpack Compose / Material 3 · Media3 · Koin · Preferences DataStore ·
+JUnit 5 + MockK + Turbine · Kover · Compose Preview screenshot tests.
+
+The living specs are in [`specs/`](specs/); design and review notes are in
+[`docs/`](docs/).
 
 ## Licence
+
 Personal project. Dependencies are Apache-2.0 (AndroidX, Media3, Koin, Kotlin).
