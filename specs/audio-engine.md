@@ -107,7 +107,12 @@ Nature:
   gusts; (2) drops: Poisson events (≈ 60/s light, 200/s downpour), each a
   2–12 ms decaying burst of noise through a 1-pole LP at a random 2–9 kHz,
   random amplitude, random pan, ≤ 24 simultaneous voices (voice stealing);
-  (3) distant body: brown noise HP 45 Hz → LP 700 Hz at low level.
+  (3) **close drops**: a second, much sparser Poisson stream (4.5/s light,
+  11/s downpour) at ~8× the sheet drops' amplitude, each a 20–50 ms burst
+  through a resonant BP (1.5–4 kHz, Q 8–15), individually panned — the drops
+  landing within a couple of metres, which give the shower a foreground the
+  ear can resolve; (4) distant body: brown noise HP 45 Hz → LP 700 Hz at low
+  level.
   **Downpour** = same generator with a heavier preset (denser drops, more low
   body, sheet widened to 0.8–8 kHz).
   The bed's lower corner and the body's low-pass are wider than the original
@@ -119,22 +124,37 @@ Nature:
   25–90 s (uniform random), with the *first* event deliberately 5–15 s after
   start so the sound identifies itself and the 20 s offline render contains a
   roll: a 4–9 s brown-noise burst through LP 40–220 Hz with a sharp attack
-  (30–150 ms), a long exponential decay, and 1–3 sub-rolls (overlapping
-  difference-of-exponentials bumps, summed and clamped); peak limited so a
-  roll never exceeds the rain bed by more than +6 dB (sleep app — no jump
-  scares). Optional "crack" transient only on 1 in 4 rolls, 9 dB under the
-  roll's own peak.
+  (30–150 ms), and 1–3 sub-rolls: 2–4 overlapping difference-of-exponentials
+  bumps spread over the first 60 % of the event, each decaying to −40 dB over
+  70 % of the event length, summed and clamped. The long per-bump decay is
+  what makes it *roll* — a shorter one is over in a couple of seconds and
+  reads as a thump. The low-pass also sweeps *down* across the event, ending
+  at 45 % of its starting cutoff, because thunder darkens as it decays (later
+  arrivals have travelled further and air absorption is
+  frequency-dependent). Peak limited so a roll never exceeds the rain bed by
+  more than +6 dB (sleep app — no jump scares); the test enforces ≤ 6.5 dB on
+  a 250 ms window. Optional "crack" transient only on 1 in 4 rolls, 9 dB under
+  the roll's own peak.
 - **Ocean** — swell envelope: raised-cosine, period 9–15 s randomized per
   wave, asymmetric (2/5 attack, 3/5 decay), with a 0.07 floor so the sea never
   goes silent; layers: brown (HP 40 Hz) + 40 % pink body following the
   envelope, "foam" = white → BP 1–3 kHz that follows the envelope delayed
   0.4 s and squared (crest hiss), plus a constant distant wash at −20 dB. A
-  1-pole LP whose cutoff tracks the envelope (600 Hz → 4 kHz, retuned at
-  control rate) so crests are brighter.
-- **Wind** — two voices: howl = white → resonant BP (centre 250–700 Hz random
-  walk at ~0.1 Hz, Q≈4) and whistle = white → BP 1.2–2.5 kHz at −12 dB with
-  its own walk; a shared gust envelope (random walk with occasional 3–8 s
-  swells) multiplies both. Pan drifts slowly ±0.3.
+  2nd-order LP whose cutoff tracks the envelope (600 Hz → 4 kHz, retuned at
+  control rate) so crests are brighter. Second order rather than one pole:
+  6 dB/oct from 4 kHz still leaves the body's pink component audible at
+  15 kHz, and crests came out hissy above the 1–3 kHz band the foam owns.
+- **Wind** — three voices: howl = white → resonant BP (centre 250–700 Hz
+  random walk at ~0.1 Hz, Q≈4); whistle = white → BP 1.2–2.5 kHz at −12 dB
+  with its own walk; and buffet = brown noise HP 25 Hz → LP 90 Hz gated by the
+  gust envelope *squared* (and capped — brown noise has a crest factor near 4
+  and an uncapped square of a 1.8 gust reaches full scale on its own). A
+  shared gust envelope (random walk with occasional 3–8 s swells) multiplies
+  the howl and whistle; the buffet is what gives a gust weight rather than
+  just more hiss, and it lifts the 30–80 Hz band ~12 dB during a swell. Pan
+  drifts slowly ±0.3 and is applied to the howl and whistle only — below
+  ~100 Hz the ear cannot localise, and panning the buffet would unbalance the
+  channels as the image drifts.
 - **Campfire** — rumble: brown (HP 55 Hz) → LP 120 Hz with slow flutter;
   crackles: Poisson 4–12/s (the rate itself drifts slowly across that range),
   each 3–25 ms burst through a resonant BP at 900 Hz–5 kHz, random pan and
@@ -143,15 +163,26 @@ Nature:
   set from octave-band measurement rather than from relative dB alone: with
   the crackles 20 dB under the sub-60 Hz rumble they are inaudible on a phone
   speaker.
-- **Stream** — 6 resonators (BP, Q 6–12) spread geometrically 400 Hz–5 kHz,
-  each fed by white noise, with independent fast amplitude wobble (6–14 Hz
-  filtered-noise AM, depth 40 %) and slow centre-frequency drift ±8 %; plus a
-  broadband wash (white → LP 2 kHz) at −10 dB. Panned ±0.5 per resonator,
-  alternating outward from the centre rather than sweeping with frequency (a
-  frequency-ordered sweep combined with the bank's downward tilt unbalances
-  the channels). Each resonator has its *own noise stream and filter per
-  channel*: one mono resonator fanned out through pan gains leaves the whole
-  bank ~0.9 correlated.
+- **Stream** — 6 bubble *size classes* (BP, Q 3–5) spread geometrically
+  400 Hz–5 kHz, each excited by its **own Poisson stream of 30–70 short noise
+  bursts per second** (difference-of-exponentials, 15–60 ms, attack 1/5 of the
+  decay, triggers summed into the envelope state so overlaps add correctly),
+  with a per-burst upward pitch sweep (the centre is pulled 35 % down at onset
+  and climbs back as the sweep decays — a rising bubble) and a resting-pitch
+  random walk of ±20 % at 0.3–1 Hz; plus a broadband wash (white → LP 2 kHz)
+  at −10 dB. Panned ±0.5 per resonator, alternating outward from the centre
+  rather than sweeping with frequency (a frequency-ordered sweep combined with
+  the bank's downward tilt unbalances the channels). Each resonator has its
+  *own noise stream and filter per channel* under a shared envelope: one mono
+  resonator fanned out through pan gains leaves the whole bank ~0.9
+  correlated.
+  This replaces a first version that used *continuous* noise with a 6–14 Hz
+  amplitude wobble and Q 6–12. That version measured correctly and sounded
+  wrong: the spectrogram was six straight horizontal lines for twenty seconds,
+  which the ear reads as a filtered drone, because water has no sustained
+  partials — it has onsets. Levels are normalised by both the band-pass noise
+  gain and the Poisson train's mean square (∝ rate × τ) so rate, duration, Q
+  and centre shape texture and not loudness.
 - **Crickets** — 4 individuals: carrier sine 3.6–5.2 kHz (wavetable), AM
   trill 28–42 Hz (depth 100 %), chirp gate 80–160 ms on / 150–350 ms off with
   a 4 ms one-pole smoothing so the gate does not click, chirp bursts of 3–7
@@ -199,6 +230,11 @@ inaudible crackle layer. See `docs/sound-design.md`.
 - Spectral slope checks with a small radix-2 FFT in test code: white ≈ 0,
   pink ≈ −3, brown ≈ −6, blue ≈ +3, violet ≈ +6 dB/oct (±1 dB) measured between
   200 Hz and 8 kHz on Welch-averaged periodograms.
+- Stream: bubble rate within the preset's range, and — the test that would
+  have caught the drone — the 5 ms envelope's p95/p50 must exceed that of the
+  *same generator with its Poisson clocks driven fast enough to be
+  continuous*, by at least 1.5 dB. That control is the old design, so the
+  assertion isolates the impulsive excitation and needs no absolute threshold.
 - Rain: drop event rate within ±20 % of preset. Ocean: envelope period within
   range, min/max ratio > 12 dB. Crickets: dominant peak in 3.5–5.3 kHz plus a
   chirp duty cycle that proves the phrases pause. Thunderstorm: 0.5–2.6 rolls

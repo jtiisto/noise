@@ -7,6 +7,7 @@ import dev.jtiisto.noise.core.audio.dsp.NoiseBurstVoicePool
 import dev.jtiisto.noise.core.audio.dsp.NoiseRng
 import dev.jtiisto.noise.core.audio.dsp.OnePoleLowPass
 import dev.jtiisto.noise.core.audio.dsp.PoissonClock
+import dev.jtiisto.noise.core.audio.dsp.ResonantBurstVoicePool
 import dev.jtiisto.noise.core.audio.dsp.SmoothNoise
 
 /**
@@ -35,6 +36,16 @@ data class RainPreset(
     val dropMinCutoffHz: Float,
     val dropMaxCutoffHz: Float,
     val bodyLevel: Float,
+    /** Sparse loud drops landing close to the listener; see [RainGenerator]. */
+    val closeDropsPerSecond: Float = 4.5f,
+    val closeDropLevel: Float = 1.5f,
+    val closeDropMinMs: Float = 20f,
+    val closeDropMaxMs: Float = 50f,
+    val closeDropMinHz: Float = 1_500f,
+    val closeDropMaxHz: Float = 4_000f,
+    val closeDropQMin: Float = 8f,
+    val closeDropQMax: Float = 15f,
+    val closeVoices: Int = 8,
     val bodyCutoffHz: Float = 700f,
     /** Sub-audio corner of the distant body; everything below is wasted excursion. */
     val bodyHighPassHz: Float = 45f,
@@ -56,6 +67,8 @@ data class RainPreset(
             dropMinCutoffHz = 2_000f,
             dropMaxCutoffHz = 9_000f,
             bodyLevel = 0.14f,
+            closeDropsPerSecond = 4.5f,
+            closeDropLevel = 2.0f,
             outputGain = 0.2155f,
         )
 
@@ -77,6 +90,8 @@ data class RainPreset(
             dropMinCutoffHz = 2_500f,
             dropMaxCutoffHz = 11_000f,
             bodyLevel = 0.30f,
+            closeDropsPerSecond = 11f,
+            closeDropLevel = 1.7f,
             gustDepth = 0.28f,
             outputGain = 0.1278f,
         )
@@ -136,9 +151,14 @@ class RainGenerator(
     private val gust = SmoothNoise(sampleRate, gustRng, preset.gustRateHz)
     private val dropClock = PoissonClock(sampleRate, dropRng, preset.dropsPerSecond)
     private val drops = NoiseBurstVoicePool(preset.voices, dropRng, sampleRate)
+    private val closeClock = PoissonClock(sampleRate, dropRng, preset.closeDropsPerSecond)
+    private val closeDrops = ResonantBurstVoicePool(preset.closeVoices, dropRng, sampleRate)
 
-    /** Drops started since construction / [reset] — the drop-rate assertion's probe. */
+    /** Sheet drops started since construction / [reset] — the drop-rate assertion's probe. */
     val dropCount: Long get() = drops.spawnCount
+
+    /** Close drops started since construction / [reset]. */
+    val closeDropCount: Long get() = closeDrops.spawnCount
 
     init {
         configureBed()
@@ -163,6 +183,9 @@ class RainGenerator(
         val maxDecay = preset.dropMaxMs * sampleRate / 1000f
         val minCutoff = preset.dropMinCutoffHz
         val maxCutoff = preset.dropMaxCutoffHz
+        val closeLevel = preset.closeDropLevel
+        val closeMinDecay = preset.closeDropMinMs * sampleRate / 1000f
+        val closeMaxDecay = preset.closeDropMaxMs * sampleRate / 1000f
 
         for (i in 0 until frames) {
             val gustGain = 1f + gustDepth * gust.next()
@@ -190,10 +213,18 @@ class RainGenerator(
                 val cutoff = dropRng.nextRange(minCutoff, maxCutoff)
                 drops.spawn(decay, amplitude, dropRng.nextFloat(), cutoff)
             }
-            // The pool accumulates into the output buffer we just wrote, so
+            if (closeClock.tick()) {
+                val amplitude = closeLevel * (0.5f + 0.5f * dropRng.nextUnit()) * gustGain
+                val decay = dropRng.nextRange(closeMinDecay, closeMaxDecay).toInt()
+                val centre = dropRng.nextRange(preset.closeDropMinHz, preset.closeDropMaxHz)
+                val q = dropRng.nextRange(preset.closeDropQMin, preset.closeDropQMax)
+                closeDrops.spawn(decay, amplitude, dropRng.nextFloat(), centre, q)
+            }
+            // The pools accumulate into the output buffer we just wrote, so
             // beds and drops share one accumulator and no scratch array is
             // needed; the calibration gain is applied last, to everything.
             drops.addSample(left, right, i)
+            closeDrops.addSample(left, right, i)
             left[i] *= gain
             right[i] *= gain
         }
@@ -217,6 +248,8 @@ class RainGenerator(
         gust.reset()
         dropClock.reset()
         drops.reset()
+        closeClock.reset()
+        closeDrops.reset()
     }
 
     private companion object {

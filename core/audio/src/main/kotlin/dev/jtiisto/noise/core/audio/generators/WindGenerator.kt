@@ -2,7 +2,9 @@ package dev.jtiisto.noise.core.audio.generators
 
 import dev.jtiisto.noise.core.audio.SoundGenerator
 import dev.jtiisto.noise.core.audio.dsp.Biquad
+import dev.jtiisto.noise.core.audio.dsp.BrownNoiseSource
 import dev.jtiisto.noise.core.audio.dsp.NoiseRng
+import dev.jtiisto.noise.core.audio.dsp.OnePoleLowPass
 import dev.jtiisto.noise.core.audio.dsp.PoissonClock
 import dev.jtiisto.noise.core.audio.dsp.RandomWalk
 import dev.jtiisto.noise.core.audio.dsp.SmoothNoise
@@ -33,7 +35,16 @@ data class WindPreset(
     val swellMinSeconds: Float = 3f,
     val swellMaxSeconds: Float = 8f,
     val panDrift: Float = 0.3f,
-    val outputGain: Float = 2.96f,
+    /**
+     * Low-frequency buffet: the pressure fluctuation of moving air against
+     * whatever the listener is inside. It is gated by the gust envelope
+     * *squared*, so it only arrives with the strong gusts, which is what makes
+     * a gust feel like weight rather than just more hiss.
+     */
+    val buffetLevel: Float = 0.020f,
+    val buffetHighPassHz: Float = 25f,
+    val buffetLowPassHz: Float = 90f,
+    val outputGain: Float = 2.82f,
 ) {
     companion object {
         val DEFAULT = WindPreset()
@@ -69,6 +80,8 @@ class WindGenerator(
     private val howlRngRight = NoiseRng(streamSeed(seed, 53))
     private val whistleRngLeft = NoiseRng(streamSeed(seed, 54))
     private val whistleRngRight = NoiseRng(streamSeed(seed, 55))
+    private val buffetRngLeft = NoiseRng(streamSeed(seed, 56))
+    private val buffetRngRight = NoiseRng(streamSeed(seed, 57))
 
     private val howlLeft = Biquad()
     private val howlRight = Biquad()
@@ -82,6 +95,13 @@ class WindGenerator(
         RandomWalk(controlRate, rng, preset.howlMinHz, preset.howlMaxHz, preset.howlWalkHz)
     private val whistleWalk =
         RandomWalk(controlRate, rng, preset.whistleMinHz, preset.whistleMaxHz, preset.whistleWalkHz)
+    private val buffetLeft =
+        BrownNoiseSource(sampleRate, buffetRngLeft, 10f, preset.buffetHighPassHz)
+    private val buffetRight =
+        BrownNoiseSource(sampleRate, buffetRngRight, 10f, preset.buffetHighPassHz)
+    private val buffetLowPassLeft = OnePoleLowPass(sampleRate, preset.buffetLowPassHz)
+    private val buffetLowPassRight = OnePoleLowPass(sampleRate, preset.buffetLowPassHz)
+
     private val gustNoise = SmoothNoise(sampleRate, rng, preset.gustRateHz)
     private val panNoise = SmoothNoise(sampleRate, rng, PAN_RATE_HZ)
     private val swellClock = PoissonClock(sampleRate, rng, 1f / preset.swellMeanSeconds)
@@ -128,8 +148,19 @@ class WindGenerator(
             val w = whistleLeft.process(whistleRngLeft.nextFloat()) * whistleLevel
             val w2 = whistleRight.process(whistleRngRight.nextFloat()) * whistleLevel
 
-            left[i] = (h + w) * gust * panL * gain
-            right[i] = (h2 + w2) * gust * panR * gain
+            // The buffet is added after the pan: below ~100 Hz the ear cannot
+            // localise anyway, and panning it would only unbalance the
+            // channels as the image drifts.
+            // Squared *and capped*: brown noise already has a crest factor
+            // around 4, and an uncapped square of a 1.8 gust would put the
+            // strongest buffet peaks past full scale on their own.
+            val gustSquared = (gust * gust).coerceAtMost(1.6f)
+            val buffet = gustSquared * preset.buffetLevel
+            val bl = buffetLowPassLeft.process(buffetLeft.next()) * buffet
+            val br = buffetLowPassRight.process(buffetRight.next()) * buffet
+
+            left[i] = ((h + w) * gust * panL + bl) * gain
+            right[i] = ((h2 + w2) * gust * panR + br) * gain
         }
     }
 
@@ -145,6 +176,12 @@ class WindGenerator(
         whistleRight.reset()
         howlWalk.reset()
         whistleWalk.reset()
+        buffetRngLeft.reseed(streamSeed(seed, 56))
+        buffetRngRight.reseed(streamSeed(seed, 57))
+        buffetLeft.reset()
+        buffetRight.reset()
+        buffetLowPassLeft.reset()
+        buffetLowPassRight.reset()
         gustNoise.reset()
         panNoise.reset()
         swellClock.reset()

@@ -68,3 +68,17 @@ noise/
 - Per-generator loudness calibration to −20 dBFS RMS.
 - Resume after process death when the app was playing (persisted wall-clock
   timer end).
+
+## Current Status (2026-09-12)
+v0.1.0 complete and reviewed: 16 synthesized sounds, 3-layer mixer, scenes,
+sleep timer with fade and an explicit until-cancelled mode, Media3 foreground
+playback with lock-screen controls, audio focus + becoming-noisy handling,
+persistence with resume after process death. 361 unit tests (model 7, audio
+143, playback 83, app 98 + 12 screenshot references), Kover gate 90 (baseline
+93.5 %). Codex review #1 findings all fixed (`docs/reviews.md`). Release APK
+1.7 MB, signed with the local keystore. Not yet exercised on a device or the
+emulator — first on-device checks to do: notification/lock-screen controls,
+headphone unplug, timer fade at the end, resume after force-stop, and the
+subjective sound quality of stream/thunder/rain (see `docs/sound-design.md`
+for the tuning knobs).
+

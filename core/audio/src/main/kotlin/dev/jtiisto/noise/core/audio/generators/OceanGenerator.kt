@@ -85,8 +85,11 @@ class OceanGenerator(
     private val brownRight = BrownNoiseSource(sampleRate, bodyRngRight, 10f, 40f)
     private val pinkLeft = PinkFilter()
     private val pinkRight = PinkFilter()
-    private val bodyLowPassLeft = OnePoleLowPass(sampleRate, preset.bodyLowPassMinHz)
-    private val bodyLowPassRight = OnePoleLowPass(sampleRate, preset.bodyLowPassMinHz)
+    // Second order, not one pole: a 6 dB/oct roll-off from 4 kHz still leaves
+    // the body's pink component clearly audible at 15 kHz, so crests came out
+    // hissy above the 1-3 kHz band the foam layer is supposed to own.
+    private val bodyLowPassLeft = Biquad()
+    private val bodyLowPassRight = Biquad()
 
     private val foamHighPassLeft = Biquad()
     private val foamHighPassRight = Biquad()
@@ -107,6 +110,8 @@ class OceanGenerator(
     private var controlCountdown = 0
 
     init {
+        bodyLowPassLeft.setLowPass(sampleRate, preset.bodyLowPassMinHz, BODY_Q)
+        bodyLowPassRight.setLowPass(sampleRate, preset.bodyLowPassMinHz, BODY_Q)
         configureFoam()
         startNewWave()
         // Start mid-wave rather than at a trough: the first thing a listener
@@ -146,8 +151,8 @@ class OceanGenerator(
                 controlCountdown = CONTROL_PERIOD
                 val cutoff = preset.bodyLowPassMinHz +
                     (preset.bodyLowPassMaxHz - preset.bodyLowPassMinHz) * shape
-                bodyLowPassLeft.setCutoff(cutoff)
-                bodyLowPassRight.setCutoff(cutoff)
+                bodyLowPassLeft.setLowPass(sampleRate, cutoff, BODY_Q)
+                bodyLowPassRight.setLowPass(sampleRate, cutoff, BODY_Q)
             }
 
             // Foam follows the envelope delayed and squared: the crest hiss.
@@ -222,6 +227,7 @@ class OceanGenerator(
     }
 
     private companion object {
+        const val BODY_Q = 0.707f
         const val FOAM_Q = 0.707f
         const val WASH_CUTOFF_HZ = 900f
         /** 64 samples = 1.3 ms at 48 kHz — far below any audible zipper rate. */

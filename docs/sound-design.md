@@ -82,7 +82,7 @@ overkill. Measured band levels: 80-160 Hz sits 10.4 dB above the 3 kHz dip, and
 
 ## Rain and Downpour
 
-One generator, two presets. Three layers:
+One generator, two presets. Four layers:
 
 1. **The sheet** — Gaussian noise (three summed uniforms) band-passed by two
    biquads. This is the sum of the thousands of drops too far or too small to
@@ -97,19 +97,34 @@ One generator, two presets. Three layers:
    pan are all randomised independently; constant-timbre drops sound like a
    Geiger counter. Level uses a squared uniform so quiet drops dominate and the
    occasional loud one stands out.
-3. **The body** — brown noise low-passed at 700 Hz and high-passed at 45 Hz:
+3. **Close drops** — a second, much sparser Poisson stream (4.5/s for Rain,
+   11/s for Downpour) at roughly eight times the sheet drops' amplitude, each a
+   20-50 ms burst through a *resonant* band-pass (1.5-4 kHz, Q 8-15) and
+   individually panned. These are the drops landing within a couple of metres
+   of the listener — on the window, on the sill, on a leaf overhead. Without
+   them the shower is a texture with no foreground and reads as "a rain
+   recording" rather than "rain outside the window"; the ear needs
+   individually resolvable events to place itself in a scene. The resonance
+   rather than a plain low-pass is what makes each one a *tap on a surface*
+   instead of a louder hiss tick.
+4. **The body** — brown noise low-passed at 700 Hz and high-passed at 45 Hz:
    rain on ground and roofs a street away. Without it the sound has no depth
    and sits inside the listener's head; below 45 Hz it is pure wasted
    excursion.
 
-Knobs (`RainPreset`): `dropsPerSecond`, sheet corners, per-layer levels, drop
-duration and colour ranges, gust rate and depth, voice count, `outputGain`.
+Knobs (`RainPreset`): `dropsPerSecond` and `closeDropsPerSecond`, sheet
+corners, per-layer levels, both drop streams' duration/colour/Q ranges, gust
+rate and depth, voice counts, `outputGain`.
 
 `LIGHT` is 60 drops/s over a 1.2-6 kHz sheet; `DOWNPOUR` is 200 drops/s over a
 0.8-8 kHz sheet with twice the low body and quieter individual drops — past
 roughly 200/s the ear stops resolving drops and hears a sheet, which is exactly
 what heavy rain is, so the extra rate buys density rather than audible ticks.
-Measured drop rates: 60.8/s and 203.9/s.
+Measured: 61.2 and 194.9 sheet drops/s against presets of 60 and 200; 5.0
+transients per second above 0.34 full scale in the Rain render against a
+close-drop preset of 4.5/s, so the close layer lands and is individually
+resolvable above a sheet that peaks near 0.25. Peak 0.72, inside the 0.8
+ceiling.
 
 Deviation from the original spec: the sheet's lower corner is 1.2 kHz (Rain) /
 800 Hz (Downpour) rather than 1.5/1.1 kHz, and the body's low-pass is 700 Hz
@@ -128,8 +143,16 @@ different parts of the channel are different distances away.
 * Source: brown noise (already -6 dB/oct) through a second-order low-pass drawn
   per event between 40 and 220 Hz — near rolls are brighter.
 * Envelope: 2-4 overlapping difference-of-exponentials bumps spread over the
-  first 55 % of a 4-9 s event, summed and clamped to 1. The overlap is what
-  gives a roll its re-swelling rather than a single decaying thud.
+  first 60 % of a 4-9 s event, each decaying to -40 dB over 70 % of the event
+  length, summed and clamped to 1. The overlap is what gives a roll its
+  re-swelling rather than a single decaying thud, and the long per-bump decay
+  is what makes it *roll*: at the 32 % this started with, the whole thing was
+  over in two and a half seconds, which reads as a thump.
+* The low-pass sweeps *down* across the event, ending at 45 % of where it
+  started. Thunder darkens as it decays, because the later arrivals have
+  travelled further through air and off more surfaces and air absorption is
+  strongly frequency-dependent. A roll whose timbre is constant reads as a
+  filtered noise burst rather than as distance.
 * One roll in four gets a short band-passed "crack" at onset (1.2-2.2 kHz,
   9 dB under the roll's own peak): the direct path arriving before the smeared
   reflections. It is deliberately quiet.
@@ -139,9 +162,12 @@ different parts of the channel are different distances away.
 Rolls arrive every 25-90 s, but the *first* one lands 5-15 s after start so a
 listener who taps "Thunderstorm" hears thunder rather than wondering whether
 they picked the wrong sound (and so the 20 s offline render contains one).
-Peak amplitude is capped at roughly 2x the bed's RMS — the spec's +6 dB ceiling.
-Measured: a roll lifts the sub-250 Hz band about 16 dB and the full-band level
-about 2-5 dB. This is a sleep app; a roll must never be a jump scare.
+Peak amplitude is capped at roughly 2x the bed's RMS — the spec's +6 dB
+ceiling, which the test suite now enforces at 6.5 dB rather than the 8 dB it
+originally allowed. Measured: a roll lifts the sub-250 Hz band by 15.4 dB and
+stays above the bed for about 4.5 s (3.2 s of that more than 3 dB up), while
+the full-band 250 ms level rises 5.6 dB. This is a sleep app; a roll must never
+be a jump scare.
 
 Knobs (`ThunderPreset`): intervals, first-roll window, duration, cutoff range,
 attack range, sub-roll count, crack probability, `peakAmplitude`, `bedTrim`.
@@ -157,9 +183,12 @@ stops the swell sounding like a tremolo pedal. The envelope never reaches zero
 Three layers follow it:
 
 * **Body** — brown (high-passed at 40 Hz) plus 40 % pink for mid presence,
-  through a one-pole low-pass whose cutoff sweeps 600 Hz -> 4 kHz with the
-  envelope. Loud water is *brighter*, not merely louder; a fixed-timbre swell
-  is the giveaway of an amplitude-modulated noise bed.
+  through a *second-order* low-pass whose cutoff sweeps 600 Hz -> 4 kHz with
+  the envelope. Loud water is *brighter*, not merely louder; a fixed-timbre
+  swell is the giveaway of an amplitude-modulated noise bed. Second order
+  rather than one pole because 6 dB/oct from 4 kHz still leaves the pink
+  component clearly audible at 15 kHz, and crests came out hissy above the
+  1-3 kHz band the foam layer is supposed to own.
 * **Foam** — white through a 1-3 kHz band-pass, driven by the envelope delayed
   0.4 s (a 19 200-sample ring buffer) and *squared*. Squaring narrows the hiss
   to the top of the wave so it reads as the crest breaking; the delay is what
@@ -184,6 +213,16 @@ top by a Poisson clock. The two time scales together are what makes wind sound
 alive — the wander alone is too even, the swells alone too periodic. The whole
 voice pans slowly by +/-0.3, because wind moves.
 
+A third voice carries the **buffet**: brown noise between 25 and 90 Hz, gated
+by the gust envelope *squared* and capped, because brown noise already has a
+crest factor near 4 and an uncapped square of a 1.8 gust would reach full scale
+on its own. This is the pressure fluctuation of moving air against whatever the
+listener is inside, and it is what gives a gust weight rather than just more
+hiss. It is added *after* the pan: below about 100 Hz the ear cannot localise
+anyway, and panning it would only unbalance the channels as the image drifts.
+Measured: the 30-80 Hz band lifts about 12 dB during a swell and sits near the
+noise floor between gusts.
+
 Filter centres are retuned at control rate (every 64 samples, 1.3 ms) rather
 than per sample: recomputing a biquad's cosines 48 000 times a second would
 cost more than the rest of the generator, and the centre moves by a fraction of
@@ -191,7 +230,7 @@ a hertz in that time. Measured dominant peak: ~310-580 Hz depending on where
 the walk is.
 
 Knobs (`WindPreset`): both bands' ranges and Qs, walk rates, whistle level,
-gust depth and rate, swell interval/length, pan drift.
+gust depth and rate, swell interval/length, pan drift, buffet level and band.
 
 ## Campfire
 
@@ -219,24 +258,65 @@ level.
 
 ## Stream
 
-Running water is bubbles: each is a tiny Helmholtz resonator whose pitch is its
-size, and a brook is thousands forming and collapsing. Synthesising individual
-bubbles is possible but expensive; the cheap equivalent that fools the ear is
-six narrow band-passes (Q 6-12) on white noise, spread *geometrically* between
-400 Hz and 5 kHz, each **wobbling** in amplitude at 6-14 Hz. The wobble is the
-trick — static band-passed noise is a vowel, wobbling band-passed noise is
-water. Each resonator also drifts +/-8 % in centre frequency at control rate, and
-a broadband wash under 2 kHz sits 10 dB down.
+Running water is bubbles: each is a tiny Helmholtz resonator whose pitch is set
+by its radius, it rings for a few tens of milliseconds, and its pitch *rises*
+as it ascends and shrinks under falling pressure. A brook is thousands of them
+per second across a range of sizes.
 
-Each resonator has independent noise *and filters per channel*: feeding one
-mono resonator to both ears through pan gains made the bank 0.91-correlated and
-collapsed the brook into the middle of the listener's head. Pans alternate
-outward from centre rather than sweeping low-to-high, because sweeping would
-tie pan position to frequency and the bank's downward tilt would then leave the
-left side permanently louder. Measured L/R correlation after the fix: 0.004.
+The first version of this generator drove six band-passes with **continuous**
+white noise and wobbled their amplitude. That is the standard cheap
+approximation, and it is wrong in a way that is obvious the moment you plot it:
+six perfectly straight horizontal lines across a twenty-second spectrogram. The
+ear hears that as a filtered drone — a vowel — because water has no sustained
+partials at all. What it has is *onsets*. Neither the +/-8 % drift nor the
+6-14 Hz amplitude wobble was enough to disguise that; you cannot wobble a
+sustained tone into an event.
 
-Knobs (`StreamPreset`): resonator count, frequency span, Q range, wobble rate
-range and depth, drift fraction, pan spread, wash cutoff and level.
+So the excitation is impulsive. Six **size classes**, spread geometrically
+between 400 Hz and 5 kHz, each with:
+
+* its own **Poisson clock** at 30-70 bubbles/s and its own
+  difference-of-exponentials envelope, whose state is *added* to on each
+  trigger so overlapping bubbles sum correctly. The result is a continuously
+  fluctuating excitation made of distinct attacks rather than a steady level;
+* a **sweep** kicked to 1 by every trigger, decaying with that class's own time
+  constant, which pulls the resonator's centre down 35 % and lets it climb back
+  — the rising chirp of a bubble;
+* **Q 3-5**, not 6-12. A high-Q resonator rings long enough to become a tone; a
+  broad one just colours the burst, which is what a bubble does;
+* a resting pitch wandering **+/-20 % at 0.3-1 Hz**, fast and wide enough that
+  the bands visibly move rather than sitting still;
+* an attack 1/5 of the decay rather than the 1/8 the drop and crackle pools
+  use: 8:1 gave a spikier onset and a crest factor that ate the mix's headroom,
+  and a bubble is a resonance being filled, not a click.
+
+Two normalisations keep rate, duration, Q and centre shaping *texture* and not
+loudness: the band-pass's noise gain, and the mean square of a Poisson train of
+these pulses (proportional to rate x tau).
+
+Under it all, a quiet broadband wash below 2 kHz — the sheet of water that is
+not bubbling.
+
+Each resonator has independent noise *and filters per channel* under a shared
+envelope (one bubble, two ears): feeding one mono resonator to both ears
+through pan gains made the bank 0.91-correlated and collapsed the brook into
+the middle of the listener's head. Pans alternate outward from centre rather
+than sweeping low-to-high, because sweeping would tie pan position to frequency
+and the bank's downward tilt would then leave the left side permanently louder.
+
+Measured: 312 bubbles/s across the six classes; L/R correlation 0.002; and the
+5 ms envelope's p95/p50 is **5.33 dB against 2.49 dB** for the same synth with
+its clocks driven fast enough to make the excitation continuous — that control
+*is* the old design, so the comparison isolates exactly what changed and needs
+no magic absolute threshold. The spectrogram now shows short bright blobs
+scattered across 400 Hz-5 kHz instead of lines. It is the peakiest sound in the
+catalog (crest factor 18.5 dB), but only about 10 samples per million exceed
+0.7 and the 99.99th percentile is 0.56, so the clipper never has real work to
+do.
+
+Knobs (`StreamPreset`): resonator count, frequency span, Q range, bubble rate
+and duration ranges, sweep depth, drift fraction and rate range, pan spread,
+wash cutoff and level.
 
 ## Crickets
 

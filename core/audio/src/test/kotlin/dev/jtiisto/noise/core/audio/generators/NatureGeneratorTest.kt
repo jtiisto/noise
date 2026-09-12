@@ -129,7 +129,9 @@ class NatureGeneratorTest {
         val loudest = sorted.last()
         val headroomDb = 20.0 * kotlin.math.log10(loudest / median)
         println("thunder peak is %.1f dB over the median bed".format(headroomDb))
-        assertTrue(headroomDb <= 8.0, "a roll reached ${"%.1f".format(headroomDb)} dB over the bed")
+        // The spec caps a roll at +6 dB over the bed; 6.5 leaves room for the
+        // measurement window without letting a real regression through.
+        assertTrue(headroomDb <= 6.5, "a roll reached ${"%.1f".format(headroomDb)} dB over the bed")
         assertTrue(headroomDb >= 2.0, "rolls are inaudible: only ${"%.1f".format(headroomDb)} dB over the bed")
     }
 
@@ -174,6 +176,56 @@ class NatureGeneratorTest {
         val peakHz = SignalAnalysis.dominantFrequency(psd, capture.sampleRate, minHz = 100.0)
         println("stream dominant peak %.0f Hz".format(peakHz))
         assertTrue(peakHz in 250.0..6_000.0, "stream peaks at $peakHz Hz, outside the 400 Hz-5 kHz bank")
+    }
+
+    @Test
+    @DisplayName("stream bubbles at the preset's Poisson rate")
+    fun streamBubbleRate() {
+        val generator = StreamGenerator(RenderHarness.SAMPLE_RATE, SEED)
+        val seconds = 20.0
+        RenderHarness.renderGenerator(generator, seconds)
+        val rate = generator.bubbleCount / seconds
+        val preset = StreamPreset.DEFAULT
+        val low = preset.burstsPerSecondMin * preset.resonators * 0.8
+        val high = preset.burstsPerSecondMax * preset.resonators * 1.2
+        println("stream %.0f bubbles/s across %d size classes".format(rate, preset.resonators))
+        assertTrue(rate in low..high, "bubble rate $rate/s outside $low..$high")
+    }
+
+    @Test
+    @DisplayName("stream is impulsive bubbling, not a filtered drone")
+    fun streamIsImpulsive() {
+        // The control is the same synth with its Poisson clocks driven so fast
+        // that the excitation becomes continuous noise — i.e. exactly the
+        // "six steady band-passes" design this generator replaced. Comparing
+        // against it isolates the one thing that changed and needs no magic
+        // absolute threshold.
+        val bubbling = envelopeCrestDb(StreamGenerator(RenderHarness.SAMPLE_RATE, SEED))
+        val drone = envelopeCrestDb(
+            StreamGenerator(
+                RenderHarness.SAMPLE_RATE,
+                SEED,
+                StreamPreset.DEFAULT.copy(
+                    burstsPerSecondMin = 3_000f,
+                    burstsPerSecondMax = 3_000f,
+                ),
+            ),
+        )
+        println("stream 5 ms envelope p95/p50: bubbling %.2f dB, continuous %.2f dB".format(bubbling, drone))
+        assertTrue(
+            bubbling > drone + 1.5,
+            "the impulsive excitation is barely more dynamic than continuous noise " +
+                "($bubbling dB vs $drone dB) - the brook will sound like a drone",
+        )
+    }
+
+    private fun envelopeCrestDb(generator: StreamGenerator): Double {
+        val capture = RenderHarness.renderGenerator(generator, seconds = 15.0, warmUpSeconds = 2.0)
+        val envelope = SignalAnalysis.rmsEnvelope(capture.left, capture.sampleRate / 200)
+        val sorted = envelope.sorted()
+        val median = sorted[sorted.size / 2]
+        val high = sorted[(sorted.size * 95) / 100]
+        return 20.0 * kotlin.math.log10(high / median)
     }
 
     @Test

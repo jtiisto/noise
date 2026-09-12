@@ -26,11 +26,21 @@ data class ThunderPreset(
     val maxDurationSeconds: Float = 9f,
     val minCutoffHz: Float = 40f,
     val maxCutoffHz: Float = 220f,
+    /**
+     * How far the roll's low-pass has fallen by the end of the event. Thunder
+     * darkens as it decays: the later arrivals have travelled further through
+     * air and off more surfaces, and air absorption is strongly
+     * frequency-dependent. A roll whose timbre is constant reads as a
+     * filtered noise burst rather than as distance.
+     */
+    val endCutoffFraction: Float = 0.45f,
+    /** Fraction of the event length over which a bump decays to -40 dB. */
+    val bumpDecayFraction: Float = 0.70f,
     val minAttackMs: Float = 30f,
     val maxAttackMs: Float = 150f,
     val maxSubRolls: Int = 3,
     val crackProbability: Float = 0.25f,
-    val peakAmplitude: Float = 0.214f,
+    val peakAmplitude: Float = 0.180f,
     val bedTrim: Float = 0.90f,
 ) {
     companion object {
@@ -91,6 +101,10 @@ class ThunderstormGenerator(
     private var samplesUntilRoll = 0
     private var rollSamplesLeft = 0
     private var rollElapsed = 0
+    private var rollDurationSamples = 1
+    private var rollCutoffStart = 0f
+    private var rollCutoffEnd = 0f
+    private var controlCountdown = 0
 
     private var crackAttackState = 0f
     private var crackDecayState = 0f
@@ -116,6 +130,10 @@ class ThunderstormGenerator(
             // rolls can never overlap and the schedule needs no state machine.
             if (--samplesUntilRoll <= 0) startRoll()
             if (rollSamplesLeft > 0) {
+                if (--controlCountdown <= 0) {
+                    controlCountdown = CONTROL_PERIOD
+                    darkenRoll()
+                }
                 val envelope = advanceRollEnvelope()
                 if (envelope > 0f) {
                     val amplitude = envelope * preset.peakAmplitude
@@ -153,6 +171,7 @@ class ThunderstormGenerator(
         rollSamplesLeft = 0
         rollElapsed = 0
         crackSamplesLeft = 0
+        controlCountdown = 0
         bumpCount = 0
         rollCount = 0L
         scheduleFirstRoll()
@@ -173,16 +192,19 @@ class ThunderstormGenerator(
         val gap = rng.nextRange(preset.minIntervalSeconds, preset.maxIntervalSeconds) * sampleRate
         samplesUntilRoll = (durationSamples + gap.toInt()).coerceAtLeast(1)
 
-        val cutoff = rng.nextRange(preset.minCutoffHz, preset.maxCutoffHz)
-        toneLeft.setLowPass(sampleRate, cutoff, TONE_Q)
-        toneRight.setLowPass(sampleRate, cutoff, TONE_Q)
+        rollDurationSamples = durationSamples.coerceAtLeast(1)
+        rollCutoffStart = rng.nextRange(preset.minCutoffHz, preset.maxCutoffHz)
+        rollCutoffEnd = rollCutoffStart * preset.endCutoffFraction
+        controlCountdown = 0
+        toneLeft.setLowPass(sampleRate, rollCutoffStart, TONE_Q)
+        toneRight.setLowPass(sampleRate, rollCutoffStart, TONE_Q)
 
         bumpCount = 2 + rng.nextInt(preset.maxSubRolls.coerceAtLeast(1))
         if (bumpCount > MAX_BUMPS) bumpCount = MAX_BUMPS
         // Bumps land in the first ~55 % of the event; the tail is the last
         // bump's decay, which is what makes a roll fade rather than stop.
-        val spread = durationSamples * 0.55f
-        val decaySamples = durationSamples * 0.32f
+        val spread = durationSamples * 0.60f
+        val decaySamples = durationSamples * preset.bumpDecayFraction
         for (b in 0 until bumpCount) {
             bumpDelay[b] = if (b == 0) 0 else (spread * rng.nextUnit()).toInt()
             bumpAmplitude[b] = if (b == 0) rng.nextRange(0.8f, 1f) else rng.nextRange(0.3f, 0.75f)
@@ -214,6 +236,14 @@ class ThunderstormGenerator(
             DualExponential.peak(decaySamples / attackSamples)
     }
 
+    /** Sweeps the roll's low-pass down as the event proceeds. */
+    private fun darkenRoll() {
+        val progress = (rollElapsed.toFloat() / rollDurationSamples).coerceIn(0f, 1f)
+        val cutoff = rollCutoffStart + (rollCutoffEnd - rollCutoffStart) * progress
+        toneLeft.setLowPass(sampleRate, cutoff, TONE_Q)
+        toneRight.setLowPass(sampleRate, cutoff, TONE_Q)
+    }
+
     /** Sum of the active bumps, clamped to 1 so overlapping bumps cannot exceed the cap. */
     private fun advanceRollEnvelope(): Float {
         var sum = 0f
@@ -235,6 +265,7 @@ class ThunderstormGenerator(
     private companion object {
         const val MAX_BUMPS = 4
         const val TONE_Q = 0.707f
+        const val CONTROL_PERIOD = 64
         /** The crack sits 9 dB under the roll's own peak — audible, never startling. */
         const val CRACK_LEVEL = 0.35f
     }
