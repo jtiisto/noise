@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Pre-push hook — full gate on code pushes, skipped for docs-only/no-op pushes.
+#
+#   * code changes   -> ./gradlew testDebugUnitTest koverVerifyAggregated
+#                       ./gradlew validateDebugScreenshotTest
+#   * docs-only push -> skip (every changed file is *.md, specs/, or docs/)
+#   * no-op push     -> skip (empty net diff vs the remote)
+#
+# Overrides:
+#   NOISE_FULL_PUSH=1   force the full gate regardless of the diff
+#   PREPUSH_DRYRUN=1    print the decision + changed files, run nothing
+#
+# Tracked in githooks/ and activated per-clone with
+#   git config core.hooksPath githooks
+set -uo pipefail
+
+ZERO="0000000000000000000000000000000000000000"
+BASELINE_REF="origin/main"
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+decision="full"
+reason="code/other changes present"
+changed=""
+saw_update=0
+
+classify() {
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [[ -z "${local_ref:-}" ]] && continue
+        local_sha="${local_sha:-$ZERO}"
+        remote_sha="${remote_sha:-$ZERO}"
+        [[ "$local_sha" == "$ZERO" ]] && continue   # branch deletion — nothing to test
+        saw_update=1
+
+        local base
+        if [[ "$remote_sha" == "$ZERO" ]]; then
+            if git rev-parse --verify --quiet "$BASELINE_REF" >/dev/null; then
+                base="$(git merge-base "$BASELINE_REF" "$local_sha" 2>/dev/null || true)"
+                [[ -n "$base" ]] || { decision="full"; reason="new branch with no merge-base vs $BASELINE_REF"; return; }
+            else
+                decision="full"; reason="new branch and $BASELINE_REF not present locally"; return
+            fi
+        else
+            base="$remote_sha"
+        fi
+
+        local files
+        files="$(git diff --name-only "$base" "$local_sha" 2>/dev/null)" \
+            || { decision="full"; reason="could not diff $base..$local_sha"; return; }
+        changed+="$files"$'\n'
+    done
+
+    changed="$(printf '%s' "$changed" | sed '/^$/d')"
+    if [[ "$saw_update" == "0" ]]; then decision="skip"; reason="no content updates (deletions only)"; return; fi
+    if [[ -z "$changed" ]]; then decision="skip"; reason="no-op: empty net diff vs the remote"; return; fi
+
+    local non_docs
+    non_docs="$(printf '%s\n' "$changed" | grep -vE '(\.md$|^specs/|^docs/)' || true)"
+    if [[ -z "$non_docs" ]]; then decision="docs"; reason="docs-only (*.md / specs/ / docs/)"; return; fi
+
+    decision="full"; reason="code/other changes present"
+}
+
+if [[ "${NOISE_FULL_PUSH:-}" == "1" ]]; then
+    decision="full"; reason="NOISE_FULL_PUSH=1 override"
+else
+    classify
+fi
+
+echo "pre-push: decision=$decision ($reason)"
+if [[ -n "$changed" ]]; then
+    printf '  %s\n' $changed
+fi
+
+if [[ "${PREPUSH_DRYRUN:-}" == "1" ]]; then
+    echo "pre-push: PREPUSH_DRYRUN=1 — running nothing."
+    exit 0
+fi
+
+case "$decision" in
+    skip|docs)
+        echo "pre-push: skipping the test gate."
+        exit 0
+        ;;
+esac
+
+echo "pre-push: running full unit suite with coverage gate..."
+./gradlew testDebugUnitTest koverVerifyAggregated || {
+    echo "pre-push: UNIT TESTS / COVERAGE GATE FAILED — push aborted." >&2
+    exit 1
+}
+
+echo "pre-push: validating screenshot references..."
+./gradlew validateDebugScreenshotTest || {
+    echo "pre-push: SCREENSHOT VALIDATION FAILED — push aborted." >&2
+    exit 1
+}
+
+echo "pre-push: all gates passed."

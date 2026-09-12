@@ -1,0 +1,66 @@
+import java.util.Properties
+
+plugins {
+    id("noise.android.application")
+    alias(libs.plugins.screenshot)
+}
+
+// Release signing comes from local.properties (untracked): hush.keystore,
+// hush.keystorePassword, hush.keyAlias, hush.keyPassword. Missing keys leave
+// the release build unsigned (a clean clone must still build).
+val localProperties: Properties = Properties().apply {
+    val file = rootProject.layout.projectDirectory.file("local.properties").asFile
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val keystorePath = localProperties.getProperty("hush.keystore")?.trim().orEmpty()
+
+android {
+    namespace = "dev.jtiisto.noise"
+
+    defaultConfig {
+        applicationId = "dev.jtiisto.noise"
+        versionCode = 1
+        versionName = "0.1.0"
+    }
+
+    signingConfigs {
+        if (keystorePath.isNotEmpty()) {
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = localProperties.getProperty("hush.keystorePassword")
+                keyAlias = localProperties.getProperty("hush.keyAlias")
+                keyPassword = localProperties.getProperty("hush.keyPassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Modest hardware: shrink code and resources, strip unused icons.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (keystorePath.isNotEmpty()) signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    experimentalProperties["android.experimental.enableScreenshotTest"] = true
+}
+
+dependencies {
+    implementation(project(":core:model"))
+    implementation(project(":core:audio"))
+    implementation(project(":core:playback"))
+
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
+    implementation(libs.kotlinx.coroutines.android)
+
+    screenshotTestImplementation(libs.screenshot.validation.api)
+    screenshotTestImplementation(libs.compose.ui.tooling)
+}

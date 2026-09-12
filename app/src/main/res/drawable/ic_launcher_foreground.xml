@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Crescent: full disc minus an offset disc, drawn with even-odd fill. -->
+    <path
+        android:fillColor="#ECEBF5"
+        android:fillType="evenOdd"
+        android:pathData="M54,30 a19,19 0 1,0 0,38 a15,15 0 1,1 0,-38 z" />
+    <!-- Three wave lines, thinning downwards. -->
+    <path
+        android:strokeColor="#7FA6FF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M31,74 q6,-5 12,0 t12,0 t12,0 t12,0" />
+    <path
+        android:strokeColor="#7FA6FF"
+        android:strokeWidth="3"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.7"
+        android:pathData="M35,82 q5,-4 10,0 t10,0 t10,0 t10,0" />
+    <path
+        android:strokeColor="#7FA6FF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeAlpha="0.4"
+        android:pathData="M40,89 q4,-3 8,0 t8,0 t8,0 t8,0" />
+</vector>

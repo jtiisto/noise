@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Pre-commit hook: run the unit suite when code is staged; docs-only commits
+# skip it. Tracked in githooks/ and activated per-clone with
+#   git config core.hooksPath githooks
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+if [[ -z "$staged" ]]; then
+    echo "pre-commit: nothing staged — nothing to test."
+    exit 0
+fi
+
+if printf '%s\n' "$staged" | grep -qE '^(app|core|build-logic)/|^build\.gradle|^settings\.gradle|^gradle(/|\.properties)'; then
+    echo "pre-commit: code staged — running unit tests..."
+    ./gradlew testDebugUnitTest -q || {
+        echo "pre-commit: UNIT TESTS FAILED — commit aborted." >&2
+        exit 1
+    }
+else
+    echo "pre-commit: docs/tooling-only commit — skipping tests."
+fi
+
+echo "pre-commit: checks passed."
