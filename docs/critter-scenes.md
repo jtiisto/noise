@@ -1,75 +1,112 @@
-# Critter scenes — a bolder art direction (design exploration)
+# Critter scenes — a bolder art direction (branch `critter-scenes`)
 
-**Status: EXPLORATION / not shipped.** These are *static* mockups on a parallel
-branch for the owner to react to. Nothing here is wired into the live app, and
-the shipped critter (`ui/critter/Critter.kt`, `HomeScreen.kt`) is untouched.
-Everything is drawn as Compose vector art so it renders in the JVM screenshot
-harness — no emoji, no bitmaps, no animation.
+**Status: APPROVED on this branch, wired + animated.** The owner approved the
+direction and placement; the scenes are now trimmed to float, wired into the real
+Home screen, and animated. This lives on the `critter-scenes` branch only —
+`main` still ships the small ~54 dp critter (`ui/critter/Critter.kt`), which is
+left untouched (its own tests stay green). Everything is drawn as Compose vector
+art so it renders in the JVM screenshot harness — no emoji, no bitmaps.
 
 ## The idea
-Today each critter is a tiny ~54 dp figure sitting at the base of the play orb.
-This explores a **bolder** version where each sound gets a small illustrated
-*scene* — the same established character (cat, frog, whale, fox, bird, duck,
-firefly) doing something in a little world that matches its sound. Think
-"storybook sticker": a bit more detail than today, still calm and refined for a
-sleep app. The palette and character designs match the shipped critters, then
-extend them with environments; each scene's glow and a few props pick up the
-sound's accent hue (`accentFor`) so it stays coherent on the night ground.
+Today each critter is a tiny ~54 dp figure at the base of the play orb. This is a
+**bolder** version: each sound gets a small illustrated *scene* — the same
+established character (cat, frog, whale, fox, bird, duck, firefly) doing something
+in a little world that matches its sound. "Storybook sticker": more detail than
+the small figure, still calm and refined for a sleep app. The character designs
+and palette match the shipped critters; each scene's glow and a few props pick up
+the sound's accent hue (`accentFor`) so it stays coherent on the night ground.
 
 ## Where it lives
 - `app/src/main/kotlin/dev/jtiisto/noise/ui/critterscenes/CritterScene.kt` — the
-  draft `@Composable CritterScene(kind, palette, variant, size)`. It dispatches
-  on the existing `CritterKind`, so the scenes map 1:1 onto the sounds the live
-  critter already covers. All drawing lives inside the composable's `Canvas`
-  lambda (colours, helpers, per-scene art), so the draft needs no unit tests and
-  does not touch the coverage gate.
+  `@Composable CritterScene(kind, isPlaying, palette, variant, size)` (live) and
+  `internal CritterSceneFrame(…)` (phase-pinned, for screenshots). It dispatches
+  on the existing `CritterKind`, reuses `critterFor(mix)` from `ui/critter`, and
+  reuses that package's unit-tested `pulse()` motion helper. All colours, helpers
+  and per-scene art live inside a single drawing-only `DrawScope.drawScene(…)`, so
+  the package carries no counted logic; it is Kover-excluded.
+- `app/src/main/kotlin/dev/jtiisto/noise/ui/home/HomeScreen.kt` — the real Home
+  now shows `CritterScene` (was `Critter`) as a decorative overlay in the orb box.
 - `app/src/screenshotTest/kotlin/dev/jtiisto/noise/CritterSceneMockups.kt` — the
-  `@PreviewTest` gallery. Rendered PNGs land under
-  `app/src/screenshotTestDebug/reference/.../CritterSceneMockupsKt/`.
+  isolated gallery/detail/alternates/placement studies plus `SceneMotionFrames`
+  (phase-pinned key frames). Rendered PNGs land under
+  `app/src/screenshotTestDebug/reference/.../CritterSceneMockupsKt/`. The real
+  Home references (`HomeScreenshotsKt`, `CritterScreenshotsKt`) also cover all
+  seven scenes in context.
+
+## Placement (owner-approved, 2026-09-13)
+- The scene sits **right of centre at the orb's base**, overlapping the play/pause
+  a little: inside the orb's existing 200 dp box (`HushSize.orb`),
+  `Modifier.align(BottomCenter).offset(x = 52.dp, y = 18.dp)`, scene `size = 138.dp`.
+- **No non-critter layout changes** — the header, orb, mix title, status line,
+  mix card, scenes, catalog and bottom bar do not move. Clears the title, status
+  line and timer pill on both 320 dp and 411 dp.
+- **The orb stays fully tappable under the overlap.** The scene is a bare `Canvas`
+  drawn as a **sibling after (above) the orb** in the same `Box`, with **no**
+  `clickable`/`pointerInput`/`toggleable` modifier anywhere — Compose only routes
+  touches to composables that carry a pointer modifier, so touches pass straight
+  through the decorative scene to the orb beneath. It has no `contentDescription`,
+  so TalkBack skips it.
+
+## The scenes (trimmed to float)
+Every scene floats free over the aurora — no opaque panels or filled water/ground
+blocks. Approved variant defaults: **frog umbrella (0)**, **duck bottoms-up (1)**.
+
+| Sound | Character | Scene (after trim) |
+|---|---|---|
+| Rain / Downpour / Thunderstorm | Frog | Under a leaf **umbrella** (variant 0), rain streaks falling, a soft lightning glow, a puddle ripple. Already floated. |
+| Stream | Duck | The whimsical **bottoms-up** dabble (variant 1): tail up, head under, feet paddling, expanding **ripple rings**, a reed + cattail. *Filled blue water block removed.* |
+| Ocean | Whale | Breaching among **light translucent wave curves**, a fuller spout, crescent moon + stars. *Filled sea block removed.* |
+| Campfire | Fox | Curled asleep beside a crossed-log fire, embers drifting up, warm glow, over a **soft shadow**. *Opaque ground rectangle removed.* |
+| Wind | Bird | Perched on a swaying branch, leaves + faint gust lines blowing past. Floats. |
+| Crickets | Firefly | Among swaying grass + a night blossom under a crescent moon, extra soft glimmers. Floats. |
+| Default (noise / ambience / empty) | Cat | Curled asleep on a cushion under a **free crescent moon + a star or two**, drifting accent-tinted z's. *Framed window panel removed.* |
+
+Alternate compositions still exist behind `variant` for comparison (frog: umbrella
+vs leaf-tent; duck: fishing-a-fish vs bottoms-up) — see `SceneAlternates`.
+
+## Animation (per-scene, calm & cheap)
+Same tight budget as the shipped critter:
+- **One** `rememberInfiniteTransition` drives **two** looping floats, both read
+  only *inside* the draw lambda (the palette too), so an animating scene
+  invalidates drawing without recomposing:
+  - **breathe** — a reversing 0..1 triangle (3.2 s playing / 4.6 s paused,
+    ease-in-out): the gentle body bob/breathe, throat/flame swell, firefly glow.
+  - **clock** — a restarting 0..1 sawtooth (7 s / 10 s, linear): everything that
+    drifts one way and repeats.
+- **Secondary motion is derived with pure math** — no coroutine, timer or `delay`:
+  blinks/twitches/twinkles are Hann-window `pulse(clock, center, width)`s; rain
+  streaks, embers, ripple rings and blowing leaves advance with the clock and
+  wrap; waves and gust lines drift with it; the whale spout rises and fades on
+  `sin(π·clock)`.
+- **Per scene:** frog blinks + umbrella sways + rain falls + lightning glimmer +
+  throat pulse; duck bobs with ripple rings expanding + reed sway + occasional
+  tail wiggle; whale bobs on the swell with the spout puffing + waves drifting;
+  fox breathes with embers drifting up + fire flickering; bird flutters a wing +
+  blinks + branch sways + leaves blow past; firefly glow pulses and it drifts among
+  swaying grass + glimmers; cat breathes with z's drifting up + a slow star twinkle.
+- **Livelier while playing, calmer while paused** — a `live` factor scales the
+  continuous motions and the clock runs slower when paused.
+- **Cheap by construction:** one transition, no timers/coroutines, no per-frame
+  allocation that grows — `Path`s are reused from a tiny fixed pool, and
+  `Offset`/`Size`/`Color` are value classes. No blur; the soft glows use the same
+  per-frame `radialGradient` brush the shipped orb and firefly already use.
 
 ## How to look at them
-- `SceneGallery` — all seven scenes together, to judge the family as a whole.
-- `SceneCatNook`, `SceneRainFrog`, `SceneStreamDuck`, `SceneOceanWhale`,
-  `SceneCampfireFox`, `SceneWindBird`, `SceneCricketsFirefly` — each scene on its
-  own at ~276 dp so the detail is visible.
-- `SceneAlternates` — the two alternate compositions beside their primaries.
-- `SceneNearOrb` — one scene (frog) composed at ~150 dp at the base of a *mock*
-  play orb, to judge how a larger scene would sit on the home screen. The orb
-  there is a stand-in; the real `HomeScreen` is not modified.
+- Real Home in context: `HomeScreenshotsKt/HomeIdleEmptyMix` (cat),
+  `HomePlayingThreeLayers` (frog), `HomePausedSingleLayer` (whale),
+  `HomePlayingUntilCancelled` (fox), `CritterScreenshotsKt/HomeWindBird` (bird),
+  `HomeStreamDuck` (duck), `HomeCricketsFirefly` (firefly), and `HomeSmallPhone`
+  (320 dp).
+- Isolated / studies: `SceneGallery`, the per-scene `Scene…` tiles,
+  `SceneAlternates`, `SceneNearOrb`, `ScenePlacementRightOfCentre`.
+- Motion key frames (a still can't show motion): `SceneMotionFrames` pins
+  frog eyes-open vs blink, cat z-trail early vs late, duck ripple small vs large.
 
-## The scenes
-
-| Sound | Character | Scene |
-|---|---|---|
-| Rain / Downpour / Thunderstorm | Frog | Sheltering under a big leaf umbrella; rain streaks, a soft lightning glow behind (tinted by the storm accent), a puddle with a ripple. |
-| Stream | Duck | Dabbling at the water's edge, head dipped toward a little fish peeking at the surface; ripple rings, reeds/a cattail, a lily-pad bank. ("fishing from a stream") |
-| Ocean | Whale | Breaching among gentle layered waves with a fuller spout; a crescent moon and a couple of stars. |
-| Campfire | Fox | Curled asleep beside a small crossed-log fire; a warm cosy glow, embers drifting up, a star or two. |
-| Wind | Bird | Perched on a slender branch swaying in the gust; leaves and a few faint wind streaks blowing past. |
-| Crickets (summer night) | Firefly | Hovering among tall grass and a night blossom under a crescent moon; a couple of extra soft firefly glimmers. |
-| Default (noise / ambience / empty mix) | Cat | Curled asleep in a cosy nook — a cushion, a moonlit window with a crescent moon and stars, drifting accent-tinted z's. |
-
-## Alternate compositions offered
-- **Frog** — *umbrella* (holds the leaf aloft on a stem, primary) vs *leaf tent*
-  (a big leaf leaning over the frog like a tent — softer, less "prop-y").
-- **Duck** — *fishing* (serene head-dip toward a fish, primary) vs *bottoms-up*
-  (the whimsical full dabble — tail straight up, head under, ripple rings).
-
-Both are selected with the `variant` parameter (`0` = primary). More alternates
-are easy to add the same way — e.g. a calmer "whale resting on the surface,
-spouting" instead of the breach, or a campfire framed by two logs the fox leans
-against — if the owner wants to compare.
-
-## Notes / caveats for whoever reviews these
-- **Size.** Scenes are drawn scale-independently, so they render cleanly from
-  ~120 dp up to the ~276 dp detail tiles. At the base of a 200 dp orb box, ~150 dp
-  reads well (see `SceneNearOrb`) — noticeably bolder than today's 54 dp figure,
-  and it does begin to crowd the orb, so if this direction is adopted the orb
-  area's spacing would need a real layout pass (deliberately out of scope here).
-- **Still frames only.** These carry no motion. If a direction is chosen, the
-  animation budget from `specs/ui.md` (one shared transition, secondary motion
-  derived from a clock) would need re-thinking for the richer scenes.
-- **Open question for the owner:** how much scene vs how much character? The
-  current compositions lean fairly "full vignette". A lighter take (character +
-  one or two props, less environment) is also viable and would sit more calmly
-  on the home screen.
+## Notes for the orchestrator
+- **Tap test on device:** the overlap is only decorative — tap anywhere on the
+  orb (including under the critter, right of centre) and it must play/pause. This
+  is guaranteed structurally (no pointer modifier on the scene), but confirm on
+  the emulator.
+- **Branch APK:** build from this branch as usual (`:app:assembleDebug` /
+  `assembleRelease`); nothing else in the app changed. `HushApplication`, DI,
+  playback and the audio engine are untouched.

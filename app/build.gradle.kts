@@ -36,6 +36,10 @@ android {
 
     buildTypes {
         release {
+            // Branch "critter-scenes": install ALONGSIDE the shipped app so the
+            // parallel version can be tried without replacing 0.1.5.
+            applicationIdSuffix = ".scenes"
+            versionNameSuffix = "-scenes"
             // Modest hardware: shrink code and resources, strip unused icons.
             isMinifyEnabled = true
             isShrinkResources = true

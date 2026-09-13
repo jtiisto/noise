@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -70,8 +71,8 @@ import dev.jtiisto.noise.ui.components.HushSlider
 import dev.jtiisto.noise.ui.components.SectionHeader
 import dev.jtiisto.noise.ui.components.auroraBackground
 import dev.jtiisto.noise.ui.components.rememberMixPalette
-import dev.jtiisto.noise.ui.critter.Critter
 import dev.jtiisto.noise.ui.critter.critterFor
+import dev.jtiisto.noise.ui.critterscenes.CritterScene
 import dev.jtiisto.noise.ui.formatCountdown
 import dev.jtiisto.noise.ui.formatPercent
 import dev.jtiisto.noise.ui.remainingMinutes
@@ -178,9 +179,12 @@ fun HomeScreen(
                         }
                     }
 
-                    // The orb and its little companion share one 200 dp box, so
-                    // the layout is unchanged: the critter is a pure overlay that
-                    // sits at the base of the orb, clear of the play glyph.
+                    // The orb and its critter scene share one 200 dp box, so the
+                    // layout is unchanged. The scene is a purely DECORATIVE sibling
+                    // drawn ABOVE the orb (later in the Box) and placed right of
+                    // centre at the orb's base: it shows on top of the play glyph
+                    // yet — being a bare Canvas with no pointer modifier — never
+                    // consumes touches, so the whole orb stays tappable under it.
                     Box(Modifier.align(Alignment.CenterHorizontally).size(HushSize.orb)) {
                         PlayOrb(
                             isPlaying = state.isPlaying,
@@ -194,11 +198,13 @@ fun HomeScreen(
                                 actions.onPlayPauseClick()
                             },
                         )
-                        Critter(
+                        CritterScene(
                             kind = critterFor(mix),
                             isPlaying = state.isPlaying,
                             palette = palette,
-                            modifier = Modifier.align(Alignment.BottomCenter),
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .offset(x = 52.dp, y = 18.dp),
                         )
                     }
 

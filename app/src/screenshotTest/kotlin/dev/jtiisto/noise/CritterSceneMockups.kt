@@ -30,6 +30,7 @@ import dev.jtiisto.noise.ui.components.auroraBackground
 import dev.jtiisto.noise.ui.components.rememberMixPalette
 import dev.jtiisto.noise.ui.critter.CritterKind
 import dev.jtiisto.noise.ui.critterscenes.CritterScene
+import dev.jtiisto.noise.ui.critterscenes.CritterSceneFrame
 import dev.jtiisto.noise.ui.theme.CardShape
 import dev.jtiisto.noise.ui.theme.HushColor
 import dev.jtiisto.noise.ui.theme.HushTheme
@@ -173,6 +174,7 @@ fun SceneNearOrb() {
                     }
                     CritterScene(
                         kind = CritterKind.FROG,
+                        isPlaying = true,
                         palette = palette,
                         variant = 0,
                         size = 150.dp,
@@ -203,7 +205,7 @@ private fun BigScene(kind: CritterKind, variant: Int = 0) {
             Modifier.fillMaxSize().auroraBackground(palette),
             contentAlignment = Alignment.Center,
         ) {
-            CritterScene(kind = kind, palette = palette, variant = variant, size = 276.dp)
+            CritterScene(kind = kind, isPlaying = true, palette = palette, variant = variant, size = 276.dp)
         }
     }
 }
@@ -216,7 +218,7 @@ private fun SceneCell(kind: CritterKind, label: String, tile: androidx.compose.u
             Modifier.size(tile).clip(CardShape).auroraBackground(palette),
             contentAlignment = Alignment.Center,
         ) {
-            CritterScene(kind = kind, palette = palette, variant = variant, size = tile)
+            CritterScene(kind = kind, isPlaying = true, palette = palette, variant = variant, size = tile)
         }
         Spacer(Modifier.height(6.dp))
         Text(
@@ -316,10 +318,11 @@ private fun OrbPlacementCell(
             // The scene: right of centre, at the base height, overlapping the orb.
             CritterScene(
                 kind = kind,
+                isPlaying = !paused,
                 palette = palette,
                 variant = variant,
                 size = 138.dp,
-                modifier = Modifier.align(Alignment.BottomCenter).offset(x = 52.dp, y = 20.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).offset(x = 52.dp, y = 18.dp),
             )
         }
         Text(
@@ -327,6 +330,63 @@ private fun OrbPlacementCell(
             color = HushColor.TextTertiary,
             style = MaterialTheme.typography.labelSmall,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp),
+        )
+    }
+}
+
+/**
+ * Key frames of the scene motion, pinned so a still render shows what only flashes
+ * past in the live scene: a frog eyes-open vs mid-blink, the cat's "z" trail at two
+ * drift positions, and the duck's ripple ring small vs large. [CritterSceneFrame]
+ * freezes the breathe/clock values the live [CritterScene] animates.
+ */
+@PreviewTest
+@Preview(widthDp = 380, heightDp = 560, showBackground = true, backgroundColor = SCENE_NIGHT)
+@Composable
+fun SceneMotionFrames() {
+    HushTheme {
+        Box(Modifier.fillMaxSize().auroraBackground(rememberMixPalette(Mix.EMPTY))) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PinnedSceneCell(CritterKind.FROG, "Frog · eyes open", clock = 0.0f)
+                    PinnedSceneCell(CritterKind.FROG, "Frog · blink", clock = 0.55f)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PinnedSceneCell(CritterKind.CAT, "Cat z · early", clock = 0.1f)
+                    PinnedSceneCell(CritterKind.CAT, "Cat z · late", clock = 0.6f)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PinnedSceneCell(CritterKind.DUCK, "Duck ripple · small", clock = 0.02f)
+                    PinnedSceneCell(CritterKind.DUCK, "Duck ripple · large", clock = 0.75f)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PinnedSceneCell(kind: CritterKind, label: String, clock: Float) {
+    val palette = rememberMixPalette(mixFor(kind))
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.size(168.dp).clip(CardShape).auroraBackground(palette),
+            contentAlignment = Alignment.Center,
+        ) {
+            CritterSceneFrame(
+                kind = kind,
+                breathe = 0.6f,
+                clock = clock,
+                isPlaying = true,
+                palette = palette,
+                size = 168.dp,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = label,
+            color = HushColor.TextSecondary,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.labelSmall,
         )
     }
 }

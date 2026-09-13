@@ -144,6 +144,50 @@ a control.
   blur, no heavy Canvas work. **No layout change:** the critter is drawn at the
   same ~54 dp, in the same bottom-centre overlay of the orb's existing box.
 
+#### Critter scenes (branch: `critter-scenes`)
+A parallel, bolder art direction that **replaces** the ~54 dp figure above with a
+larger illustrated *scene* per sound (`ui/critterscenes/CritterScene.kt`). Owner-
+approved and wired into the real Home on this branch only; `main` still ships the
+small critter. It reuses the same `CritterKind` + `critterFor(mix)` mapping and
+the same `pulse()` motion helper, so the sound→animal mapping is unchanged.
+- **Placement.** Still a purely decorative overlay inside the orb's 200 dp box,
+  but composed **right of centre at the orb's base**, allowed to overlap the
+  play/pause: `Modifier.align(BottomCenter).offset(x = 52.dp, y = 18.dp)`, scene
+  `size = 138.dp`. **No non-critter layout changes.** The scene is a bare
+  `Canvas` **sibling drawn after (above) the orb** with **no** pointer modifier
+  (`clickable`/`pointerInput`/`toggleable`) anywhere, so Compose routes touches
+  straight through it — the whole orb/play-pause stays tappable under the overlap.
+  It carries no `contentDescription`, so TalkBack skips it. Clears the mix title,
+  status line and timer pill on both 320 dp and 411 dp.
+- **Trimmed to float.** Every scene floats free over the aurora — no opaque
+  panels or water blocks: cat = cushion + free crescent moon + stars + drifting
+  z's (window panel removed); duck = the *bottoms-up* dabble (variant 1, the
+  approved default) with ripple rings + a reed/cattail (blue water block removed);
+  whale = light translucent wave *curves* + spout + moon (filled sea removed);
+  fox = campfire + log + embers + warm glow over a soft shadow (opaque ground
+  removed); frog = leaf umbrella (variant 0, default) + rain, already floating;
+  bird = branch + blowing leaves + gust lines; firefly = grass + blossom + moon +
+  glows. Approved variant defaults: frog umbrella (0), duck bottoms-up (1).
+- **Animation.** Same budget as the small critter — **one**
+  `rememberInfiniteTransition` driving **two** looping floats (breathe, a
+  reversing 0..1 triangle 3.2 s playing / 4.6 s paused; clock, a restarting 0..1
+  sawtooth 7 s / 10 s), both read only inside the draw lambda (palette too), so
+  nothing recomposes per frame. Secondary motion is derived with pure math:
+  blinks/twitches/twinkles are Hann-window `pulse()`s of the clock; rain streaks,
+  embers, ripple rings and blowing leaves advance with the clock and wrap; waves
+  and gust lines drift with it; the whale spout puffs and fades on `sin(π·clock)`.
+  Livelier while playing, calmer while paused (a `live` factor + longer periods).
+  Cheap by construction: no coroutines/timers, **Paths are reused** from a tiny
+  fixed pool, colours/offsets are value classes, no blur (soft glows use the same
+  per-frame `radialGradient` brush the shipped orb/firefly already use).
+- **Screenshots.** The real Home references already cover all seven on-device
+  (idle→cat, rain trio→frog, paused Ocean→whale, Campfire+Wind→fox, and
+  Wind/Stream/Crickets in `CritterScreenshots`), plus the 320 dp small phone.
+  `CritterSceneMockups.SceneMotionFrames` pins key frames via
+  `CritterSceneFrame(kind, breathe, clock, …)` — frog eyes-open vs blink, the
+  cat z-trail early vs late, the duck ripple small vs large. The
+  `ui.critterscenes` package is Kover-excluded (drawing-only art).
+
 ### Sleep timer sheet (modal bottom sheet)
 The sheet answers one question — "how long?" — and its three kinds of answer
 form a single list, bracketed by two full-width rows:
