@@ -125,3 +125,16 @@ unlike emoji), overlaid inside the orb's existing 200 dp box so the layout is
 unchanged, with one cheap idle breathe/bob and a soft fade-scale swap when the
 lead nature sound changes. Pure `critterFor(mix)` mapping is unit-tested; a
 gallery screenshot guards all seven.
+
+## 2026-09-12 — Livelier critter animations (0.1.5)
+
+Each companion animal gained characterful idle motion on top of the breathe/bob:
+the cat's z-trail drifts up in sequence, the frog blinks every few seconds
+(happy arcs) with a throat pulse, the whale's spout puffs droplets, the bird
+flutters a wing and blinks, the fox flicks an ear, the duck nods and blinks,
+and the firefly's wings shimmer. All driven by one infinite transition exposing
+two values (a reversing `breathe` and a sawtooth `clock`), with blinks/twitches derived as smooth Hann-window pulses of the clock — no timers, no extra
+transitions, no per-frame allocation, layout untouched. Verified by rendering
+pinned key frames (frog open vs mid-blink, cat z-trail early vs late, whale
+spout, fox ear) in the screenshot harness. Also lowered the Gradle/Kotlin
+daemon heaps (gradle.properties) so the gate fits on the shared build box.

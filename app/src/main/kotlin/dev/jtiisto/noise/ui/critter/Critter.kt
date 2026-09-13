@@ -2,6 +2,7 @@ package dev.jtiisto.noise.ui.critter
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -31,6 +32,15 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.jtiisto.noise.ui.theme.MixPalette
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.round
+import kotlin.math.sin
+
+private const val TAU = (2.0 * PI).toFloat()
+private const val PIf = PI.toFloat()
 
 /**
  * A small, gently-animated animal that keeps the play orb company.
@@ -39,11 +49,21 @@ import dev.jtiisto.noise.ui.theme.MixPalette
  * as Compose vector art — no emoji, no bitmaps — from circles, ovals, arcs and
  * a single reused [Path], so a frame allocates nothing that grows.
  *
- * Motion follows the app's tight budget: one [rememberInfiniteTransition]
- * drives a slow breathe/bob (2.6 s while playing, 3.8 s while paused, both
- * ease-in-out), read inside the draw lambda so an animating critter invalidates
- * drawing without recomposing. When the lead nature sound changes the animal
- * swaps with a soft fade-and-scale ([AnimatedContent]).
+ * Motion follows the app's tight budget: **one** [rememberInfiniteTransition]
+ * drives **two** looping values, both read inside the draw lambda so an
+ * animating critter invalidates drawing without recomposing:
+ *  - **breathe** — a slow 0..1 triangle (2.6 s while playing, 3.8 s while
+ *    paused, ease-in-out, reversing) that becomes the whole-body bob-and-breathe
+ *    and the firefly's belly glow.
+ *  - **clock** — a 0..1 sawtooth (6 s playing, 9 s paused, linear, restarting)
+ *    that every per-animal secondary motion is *derived* from with pure math:
+ *    the cat's staggered "z" trail, the frog/bird/duck blinks, the fox ear
+ *    twitch, the duck's nod, the whale's rising spout and the firefly's wing
+ *    shimmer. No coroutines, timers or `delay` — a blink is just a window of the
+ *    clock (see [pulse]).
+ *
+ * When the lead nature sound changes the animal swaps with a soft fade-and-scale
+ * ([AnimatedContent]).
  *
  * @param palette read only inside the draw lambda, so a mix-colour transition
  *   never recomposes the critter (the same trick the orb uses).
@@ -57,14 +77,26 @@ fun Critter(
     size: Dp = 54.dp,
 ) {
     val transition = rememberInfiniteTransition(label = "critter")
-    val phase = transition.animateFloat(
+    val breathe = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
             animation = tween(if (isPlaying) 2_600 else 3_800, easing = EaseInOut),
             repeatMode = RepeatMode.Reverse,
         ),
-        label = "critterPhase",
+        label = "critterBreathe",
+    )
+    // A monotonic loop (restart, not reverse) so secondary motions drift one way
+    // and repeat, instead of bouncing: the "z"s rise and a new one follows, the
+    // spout puffs upward, blinks happen once per turn of the loop.
+    val clock = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(if (isPlaying) 6_000 else 9_000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "critterClock",
     )
 
     // The animal is redrawn each frame, so its Path is built once here and
@@ -82,9 +114,53 @@ fun Critter(
         label = "critterSwap",
     ) { current ->
         Canvas(Modifier.size(size)) {
-            drawCritter(current, phase.value, isPlaying, palette.value.accent, path)
+            drawCritter(current, breathe.value, clock.value, isPlaying, palette.value.accent, path)
         }
     }
+}
+
+/**
+ * A critter pinned to explicit animation values — no live transition.
+ *
+ * `internal`, and used only by the screenshot references: a static render
+ * captures one instant, so this lets a `@PreviewTest` freeze [breathe]/[clock]
+ * at a chosen frame (a mid-blink frog, the "z" trail at two drift positions)
+ * that the live [Critter] would only pass through.
+ */
+@Composable
+internal fun CritterFrame(
+    kind: CritterKind,
+    breathe: Float,
+    clock: Float,
+    isPlaying: Boolean,
+    palette: State<MixPalette>,
+    modifier: Modifier = Modifier,
+    size: Dp = 54.dp,
+) {
+    val path = remember { Path() }
+    Canvas(modifier.size(size)) {
+        drawCritter(kind, breathe, clock, isPlaying, palette.value.accent, path)
+    }
+}
+
+// --- Motion maths (pure, unit-tested) ----------------------------------------
+
+/**
+ * A smooth, occasional pulse in `0..1`, derived from the looping [clock].
+ *
+ * It is `0` for almost the whole cycle, eases up to `1` at [center] and back
+ * down over a window [width] wide (a fraction of the cycle), and repeats every
+ * loop — a blink or a twitch, and never a strobe. The window wraps around the
+ * `0..1` loop, so a [center] near an edge still eases symmetrically. Pure and
+ * allocation-free; costs one `cos`.
+ */
+internal fun pulse(clock: Float, center: Float, width: Float): Float {
+    val raw = clock - center
+    val d = raw - round(raw)                 // signed distance to center in (-0.5, 0.5]
+    val half = width / 2f
+    if (abs(d) >= half) return 0f
+    // Hann window: 1 at the center, 0 (with zero slope) at both edges.
+    return 0.5f * (1f + cos(PIf * (d / half)))
 }
 
 // --- Palette -----------------------------------------------------------------
@@ -128,39 +204,41 @@ private val Blush = Color(0xFFF2A6B4)
 /**
  * Draws [kind] into the current square canvas.
  *
- * [phase] is a 0..1 triangle wave; it becomes a gentle bob-and-breathe applied
- * to the whole animal (livelier while [playing]), and a per-animal accent for
- * the cat's floating "z" and the firefly's blink.
+ * [breathe] is a 0..1 triangle wave — a gentle bob-and-breathe applied to the
+ * whole animal (livelier while [playing]) plus the firefly glow. [clock] is a
+ * 0..1 sawtooth that each animal turns into its own secondary motion (the cat's
+ * "z" trail, blinks, the ear twitch, the spout, the wing shimmer).
  *
  * `internal` (not `private`) only so the off-device render test can drive it
  * against a stubbed canvas — there is no Compose UI test rig in this project.
  */
 internal fun DrawScope.drawCritter(
     kind: CritterKind,
-    phase: Float,
+    breathe: Float,
+    clock: Float,
     playing: Boolean,
     accent: Color,
     path: Path,
 ) {
     val s = size.minDimension
     val live = if (playing) 1f else 0.55f
-    val swing = (phase - 0.5f) * 2f                    // -1..1
+    val swing = (breathe - 0.5f) * 2f                  // -1..1
     val bob = -swing * s * 0.045f * live               // drifts up and down
-    val breathe = 1f + 0.035f * phase * live           // a slow in-and-out
+    val breatheScale = 1f + 0.035f * breathe * live    // a slow in-and-out
 
     withTransform({
         translate(0f, bob)
         // Breathe from the base, so the animal never looks like it is floating.
-        scale(breathe, breathe, pivot = Offset(s * 0.5f, s * 0.96f))
+        scale(breatheScale, breatheScale, pivot = Offset(s * 0.5f, s * 0.96f))
     }) {
         when (kind) {
-            CritterKind.CAT -> drawCat(s, accent, phase, path)
-            CritterKind.FROG -> drawFrog(s)
-            CritterKind.WHALE -> drawWhale(s, path)
-            CritterKind.BIRD -> drawBird(s, accent, path)
-            CritterKind.FOX -> drawFox(s, path)
-            CritterKind.DUCK -> drawDuck(s, path)
-            CritterKind.FIREFLY -> drawFirefly(s, phase)
+            CritterKind.CAT -> drawCat(s, accent, clock, path)
+            CritterKind.FROG -> drawFrog(s, clock, live)
+            CritterKind.WHALE -> drawWhale(s, clock, path)
+            CritterKind.BIRD -> drawBird(s, accent, clock, live, path)
+            CritterKind.FOX -> drawFox(s, clock, path)
+            CritterKind.DUCK -> drawDuck(s, clock, live, path)
+            CritterKind.FIREFLY -> drawFirefly(s, breathe, clock)
         }
     }
 }
@@ -183,6 +261,25 @@ private fun DrawScope.fillTriangle(path: Path, ax: Float, ay: Float, bx: Float, 
 private fun DrawScope.beadEye(cx: Float, cy: Float, r: Float) {
     drawCircle(Eye, r, Offset(cx, cy))
     drawCircle(Shine, r * 0.34f, Offset(cx - r * 0.28f, cy - r * 0.34f))
+}
+
+/**
+ * A bead eye that blinks. When [closed] is ~0 it is a round, shiny bead; as it
+ * closes the bead squashes flat and its catch-light fades, and once nearly shut
+ * it becomes a soft upward curve — a happy closed eye, never a gap. [closed] is
+ * a 0..1 pulse (see [pulse]), so a blink eases in and out and never strobes.
+ */
+private fun DrawScope.blinkingEye(cx: Float, cy: Float, r: Float, closed: Float) {
+    val open = 1f - closed
+    if (open > 0.15f) {
+        oval(cx, cy, r, r * open, Eye)
+        val shine = ((open - 0.4f) / 0.6f).coerceIn(0f, 1f)
+        if (shine > 0f) {
+            drawCircle(Shine.copy(alpha = shine), r * 0.34f, Offset(cx - r * 0.28f, cy - r * 0.30f))
+        }
+    } else {
+        closedEye(cx, cy, r * 2.6f, Eye)
+    }
 }
 
 /** A calm, closed eye — a shallow upward curve. */
@@ -213,8 +310,8 @@ private fun DrawScope.smile(cx: Float, cy: Float, w: Float, h: Float, color: Col
 
 // --- The animals -------------------------------------------------------------
 
-/** Curled up asleep, a soft "z" drifting off the top corner. */
-private fun DrawScope.drawCat(s: Float, accent: Color, phase: Float, path: Path) {
+/** Curled up asleep, a staggered trail of "z"s drifting off the top corner. */
+private fun DrawScope.drawCat(s: Float, accent: Color, clock: Float, path: Path) {
     fun x(f: Float) = f * s
     fun y(f: Float) = f * s
 
@@ -245,19 +342,29 @@ private fun DrawScope.drawCat(s: Float, accent: Color, phase: Float, path: Path)
     // Curled front paw.
     oval(x(0.30f), y(0.86f), x(0.16f), y(0.09f), CatDark)
 
-    // A drowsy "z", tinted with the mix accent, drifting up as it fades.
-    val rise = -s * 0.05f * phase
-    val zA = 0.85f - 0.55f * phase
-    val zc = accent.copy(alpha = zA)
-    val zx = x(0.70f); val zy = y(0.30f) + rise; val zw = s * 0.12f
-    val zStroke = s * 0.03f
-    drawLine(zc, Offset(zx, zy), Offset(zx + zw, zy), zStroke, StrokeCap.Round)
-    drawLine(zc, Offset(zx + zw, zy), Offset(zx, zy + zw), zStroke, StrokeCap.Round)
-    drawLine(zc, Offset(zx, zy + zw), Offset(zx + zw, zy + zw), zStroke, StrokeCap.Round)
+    // A drowsy trail of three "z"s, tinted with the mix accent. Each rises up
+    // and to the right and fades as it goes; they are staggered a third of the
+    // loop apart so they read as a little sleep trail leaving the cat. Driven
+    // by the looping clock — no timer.
+    val stagger = 1f / 3f
+    for (i in 0..2) {
+        val f = clock - i * stagger
+        val lp = f - floor(f)                          // 0..1 for this z
+        val a = 0.9f * sin(PIf * lp)                    // fade in, then out
+        if (a <= 0.02f) continue
+        val zx = x(0.60f) + s * 0.15f * lp
+        val zy = y(0.46f) - s * 0.34f * lp
+        val zw = s * (0.085f + 0.06f * lp)             // grows as it floats away
+        val st = zw * 0.22f
+        val c = accent.copy(alpha = a)
+        drawLine(c, Offset(zx, zy), Offset(zx + zw, zy), st, StrokeCap.Round)
+        drawLine(c, Offset(zx + zw, zy), Offset(zx, zy + zw), st, StrokeCap.Round)
+        drawLine(c, Offset(zx, zy + zw), Offset(zx + zw, zy + zw), st, StrokeCap.Round)
+    }
 }
 
-/** A round, happy frog, eyes proud on top of its head. */
-private fun DrawScope.drawFrog(s: Float) {
+/** A round, happy frog: eyes proud on top, an occasional blink and a soft throat pulse. */
+private fun DrawScope.drawFrog(s: Float, clock: Float, live: Float) {
     fun x(f: Float) = f * s
     fun y(f: Float) = f * s
 
@@ -266,24 +373,27 @@ private fun DrawScope.drawFrog(s: Float) {
     oval(x(0.80f), y(0.88f), x(0.13f), y(0.07f), FrogDark)
     // Body.
     oval(x(0.50f), y(0.62f), x(0.38f), y(0.30f), FrogBody)
-    // Belly.
-    oval(x(0.50f), y(0.72f), x(0.22f), y(0.19f), FrogBelly)
+    // Belly, with a gentle throat pulse (a touch faster than the body breathe).
+    val throat = 1f + 0.05f * live * sin(TAU * 2f * clock)
+    oval(x(0.50f), y(0.72f), x(0.22f), y(0.19f) * throat, FrogBelly)
     // Eye mounds on top.
     val er = x(0.155f)
     drawCircle(FrogBody, er, Offset(x(0.34f), y(0.34f)))
     drawCircle(FrogBody, er, Offset(x(0.66f), y(0.34f)))
     drawCircle(Shine, er * 0.78f, Offset(x(0.34f), y(0.35f)))
     drawCircle(Shine, er * 0.78f, Offset(x(0.66f), y(0.35f)))
-    beadEye(x(0.35f), y(0.37f), er * 0.44f)
-    beadEye(x(0.65f), y(0.37f), er * 0.44f)
+    // An occasional slow blink — eyes ease shut into happy arcs and open again.
+    val closed = pulse(clock, 0.5f, 0.05f)
+    blinkingEye(x(0.35f), y(0.37f), er * 0.44f, closed)
+    blinkingEye(x(0.65f), y(0.37f), er * 0.44f, closed)
     // Wide smile.
     smile(x(0.50f), y(0.56f), x(0.40f), y(0.30f), FrogDark, s * 0.035f)
     drawCircle(Blush.copy(alpha = 0.5f), x(0.05f) * 1.2f, Offset(x(0.26f), y(0.60f)))
     drawCircle(Blush.copy(alpha = 0.5f), x(0.05f) * 1.2f, Offset(x(0.74f), y(0.60f)))
 }
 
-/** A little whale mid-spout, seen from the side. */
-private fun DrawScope.drawWhale(s: Float, path: Path) {
+/** A little whale, its spout puffing upward and fading on a slow loop. */
+private fun DrawScope.drawWhale(s: Float, clock: Float, path: Path) {
     fun x(f: Float) = f * s
     fun y(f: Float) = f * s
 
@@ -298,16 +408,20 @@ private fun DrawScope.drawWhale(s: Float, path: Path) {
     smile(x(0.26f), y(0.70f), x(0.26f), y(0.16f), WhaleDark, s * 0.028f)
     // Eye.
     beadEye(x(0.24f), y(0.60f), s * 0.05f)
-    // Blowhole spout — a stem and a soft fan of droplets.
+    // Blowhole spout — a steady little fountain with a droplet cluster that
+    // rises and fades on a slow loop, so it always reads as spouting.
     val bx = x(0.32f); val by = y(0.42f)
-    drawLine(Spout, Offset(bx, by), Offset(bx, by - s * 0.12f), s * 0.035f, StrokeCap.Round)
-    drawCircle(Spout, s * 0.045f, Offset(bx, by - s * 0.18f))
-    drawCircle(Spout.copy(alpha = 0.8f), s * 0.03f, Offset(bx - s * 0.10f, by - s * 0.14f))
-    drawCircle(Spout.copy(alpha = 0.8f), s * 0.03f, Offset(bx + s * 0.10f, by - s * 0.14f))
+    drawLine(Spout.copy(alpha = 0.75f), Offset(bx, by), Offset(bx, by - s * 0.11f), s * 0.03f, StrokeCap.Round)
+    drawCircle(Spout, s * 0.045f, Offset(bx, by - s * 0.16f))          // steady cap
+    val pa = sin(PIf * clock)                          // 0 -> 1 -> 0, no pop at the wrap
+    val py = by - s * (0.20f + 0.14f * clock)          // droplets drift upward
+    drawCircle(Spout.copy(alpha = pa * 0.9f), s * 0.032f, Offset(bx, py))
+    drawCircle(Spout.copy(alpha = pa * 0.7f), s * 0.028f, Offset(bx - s * 0.10f, py + s * 0.05f))
+    drawCircle(Spout.copy(alpha = pa * 0.7f), s * 0.028f, Offset(bx + s * 0.10f, py + s * 0.05f))
 }
 
-/** A round puffball bird, gently tinted with the wind accent. */
-private fun DrawScope.drawBird(s: Float, accent: Color, path: Path) {
+/** A round puffball bird, gently tinted with the wind accent; blinks and flutters a wing. */
+private fun DrawScope.drawBird(s: Float, accent: Color, clock: Float, live: Float, path: Path) {
     fun x(f: Float) = f * s
     fun y(f: Float) = f * s
 
@@ -322,26 +436,29 @@ private fun DrawScope.drawBird(s: Float, accent: Color, path: Path) {
     drawCircle(body, x(0.34f), Offset(x(0.54f), y(0.58f)))
     // Belly.
     oval(x(0.54f), y(0.68f), x(0.20f), y(0.18f), BirdBelly)
-    // Wing.
-    drawArc(
-        color = wing,
-        startAngle = 150f,
-        sweepAngle = 150f,
-        useCenter = true,
-        topLeft = Offset(x(0.36f), y(0.44f)),
-        size = Size(x(0.30f), y(0.34f)),
-    )
+    // Wing, fluttering a few degrees around its shoulder.
+    val flutter = 5f * live * sin(TAU * clock)
+    withTransform({ rotate(flutter, pivot = Offset(x(0.42f), y(0.50f))) }) {
+        drawArc(
+            color = wing,
+            startAngle = 150f,
+            sweepAngle = 150f,
+            useCenter = true,
+            topLeft = Offset(x(0.36f), y(0.44f)),
+            size = Size(x(0.30f), y(0.34f)),
+        )
+    }
     // A tiny tuft.
     fillTriangle(path, x(0.52f), y(0.26f), x(0.58f), y(0.16f), x(0.62f), y(0.28f), body)
     // Beak, pointing out.
     fillTriangle(path, x(0.80f), y(0.52f), x(0.94f), y(0.56f), x(0.80f), y(0.60f), BirdBeak)
-    // Eye.
-    beadEye(x(0.66f), y(0.50f), s * 0.055f)
+    // Eye, with an occasional blink.
+    blinkingEye(x(0.66f), y(0.50f), s * 0.055f, pulse(clock, 0.4f, 0.05f))
     drawCircle(Blush.copy(alpha = 0.5f), s * 0.05f, Offset(x(0.74f), y(0.60f)))
 }
 
-/** A fox curled cosy, bushy cream-tipped tail wrapped round the front. */
-private fun DrawScope.drawFox(s: Float, path: Path) {
+/** A fox curled cosy asleep, its bushy tail wrapped round the front and an occasional ear twitch. */
+private fun DrawScope.drawFox(s: Float, clock: Float, path: Path) {
     fun x(f: Float) = f * s
     fun y(f: Float) = f * s
 
@@ -362,11 +479,15 @@ private fun DrawScope.drawFox(s: Float, path: Path) {
     // Head.
     val hx = x(0.36f); val hy = y(0.60f); val hr = x(0.205f)
     drawCircle(FoxBody, hr, Offset(hx, hy))
-    // Pointy ears.
+    // Left ear (still).
     fillTriangle(path, hx - hr * 0.92f, hy - hr * 0.50f, hx - hr * 0.58f, hy - hr * 1.42f, hx - hr * 0.06f, hy - hr * 0.72f, FoxBody)
-    fillTriangle(path, hx + hr * 0.08f, hy - hr * 0.74f, hx + hr * 0.60f, hy - hr * 1.42f, hx + hr * 0.92f, hy - hr * 0.50f, FoxBody)
     fillTriangle(path, hx - hr * 0.70f, hy - hr * 0.56f, hx - hr * 0.52f, hy - hr * 1.06f, hx - hr * 0.22f, hy - hr * 0.68f, FoxDark)
-    fillTriangle(path, hx + hr * 0.24f, hy - hr * 0.68f, hx + hr * 0.52f, hy - hr * 1.06f, hx + hr * 0.70f, hy - hr * 0.56f, FoxDark)
+    // Right ear, with an occasional quick flick around its base.
+    val twitch = pulse(clock, 0.6f, 0.05f)
+    withTransform({ rotate(twitch * 13f, pivot = Offset(hx + hr * 0.4f, hy - hr * 0.55f)) }) {
+        fillTriangle(path, hx + hr * 0.08f, hy - hr * 0.74f, hx + hr * 0.60f, hy - hr * 1.42f, hx + hr * 0.92f, hy - hr * 0.50f, FoxBody)
+        fillTriangle(path, hx + hr * 0.24f, hy - hr * 0.68f, hx + hr * 0.52f, hy - hr * 1.06f, hx + hr * 0.70f, hy - hr * 0.56f, FoxDark)
+    }
     // Cream cheeks / muzzle.
     oval(hx, hy + hr * 0.34f, hr * 0.72f, hr * 0.56f, FoxCream)
     // Cosy closed eyes and nose.
@@ -375,8 +496,8 @@ private fun DrawScope.drawFox(s: Float, path: Path) {
     drawCircle(Eye, hr * 0.14f, Offset(hx, hy + hr * 0.42f))
 }
 
-/** A cheerful rubber-duck, facing right. */
-private fun DrawScope.drawDuck(s: Float, path: Path) {
+/** A cheerful rubber-duck facing right, nodding gently with an occasional blink. */
+private fun DrawScope.drawDuck(s: Float, clock: Float, live: Float, path: Path) {
     fun x(f: Float) = f * s
     fun y(f: Float) = f * s
 
@@ -394,26 +515,33 @@ private fun DrawScope.drawDuck(s: Float, path: Path) {
         size = Size(x(0.34f), y(0.30f)),
         style = Stroke(width = s * 0.03f, cap = StrokeCap.Round),
     )
-    // Head.
-    val hx = x(0.68f); val hy = y(0.40f); val hr = x(0.19f)
-    drawCircle(DuckBody, hr, Offset(hx, hy))
-    // Beak with a soft split line.
-    fillTriangle(path, x(0.84f), y(0.38f), x(0.99f), y(0.42f), x(0.84f), y(0.47f), DuckBeak)
-    drawLine(DuckBeakSplit, Offset(x(0.85f), y(0.425f)), Offset(x(0.98f), y(0.42f)), s * 0.012f, StrokeCap.Round)
-    // Eye.
-    beadEye(x(0.70f), y(0.37f), s * 0.05f)
-    drawCircle(Blush.copy(alpha = 0.45f), s * 0.045f, Offset(x(0.62f), y(0.46f)))
+    // Head group — a gentle nod (dip and tilt) around the neck, plus a blink.
+    val nod = sin(TAU * clock)
+    withTransform({
+        rotate(2.5f * live * nod, pivot = Offset(x(0.58f), y(0.48f)))
+        translate(0f, s * 0.012f * live * nod)
+    }) {
+        val hx = x(0.68f); val hy = y(0.40f); val hr = x(0.19f)
+        drawCircle(DuckBody, hr, Offset(hx, hy))
+        // Beak with a soft split line.
+        fillTriangle(path, x(0.84f), y(0.38f), x(0.99f), y(0.42f), x(0.84f), y(0.47f), DuckBeak)
+        drawLine(DuckBeakSplit, Offset(x(0.85f), y(0.425f)), Offset(x(0.98f), y(0.42f)), s * 0.012f, StrokeCap.Round)
+        // Eye, with an occasional blink.
+        blinkingEye(x(0.70f), y(0.37f), s * 0.05f, pulse(clock, 0.5f, 0.05f))
+        drawCircle(Blush.copy(alpha = 0.45f), s * 0.045f, Offset(x(0.62f), y(0.46f)))
+    }
 }
 
-/** A firefly whose belly glows in a slow blink. */
-private fun DrawScope.drawFirefly(s: Float, phase: Float) {
+/** A firefly whose belly glows in a slow blink, its wings shimmering softly. */
+private fun DrawScope.drawFirefly(s: Float, breathe: Float, clock: Float) {
     fun x(f: Float) = f * s
     fun y(f: Float) = f * s
 
     val cx = x(0.5f)
-    // Soft wings behind the body.
-    oval(x(0.34f), y(0.44f), x(0.16f), y(0.11f), FireflyWing.copy(alpha = 0.5f))
-    oval(x(0.66f), y(0.44f), x(0.16f), y(0.11f), FireflyWing.copy(alpha = 0.5f))
+    // Soft wings behind the body, shimmering gently out of phase with each other.
+    val shimmer = 0.18f * sin(TAU * clock)
+    oval(x(0.34f), y(0.44f), x(0.16f), y(0.11f), FireflyWing.copy(alpha = 0.42f + shimmer))
+    oval(x(0.66f), y(0.44f), x(0.16f), y(0.11f), FireflyWing.copy(alpha = 0.42f - shimmer))
     // Antennae with little tips.
     drawLine(FireflyBody, Offset(x(0.44f), y(0.28f)), Offset(x(0.36f), y(0.16f)), s * 0.022f, StrokeCap.Round)
     drawLine(FireflyBody, Offset(x(0.56f), y(0.28f)), Offset(x(0.64f), y(0.16f)), s * 0.022f, StrokeCap.Round)
@@ -425,8 +553,8 @@ private fun DrawScope.drawFirefly(s: Float, phase: Float) {
     // Face.
     beadEye(x(0.46f), y(0.33f), s * 0.03f)
     beadEye(x(0.54f), y(0.33f), s * 0.03f)
-    // Glowing abdomen — the blink.
-    val glowA = 0.35f + 0.55f * phase
+    // Glowing abdomen — the blink, on the slow breathe.
+    val glowA = 0.35f + 0.55f * breathe
     val gy = y(0.74f); val gr = s * 0.30f
     drawCircle(
         brush = Brush.radialGradient(
@@ -439,5 +567,5 @@ private fun DrawScope.drawFirefly(s: Float, phase: Float) {
         radius = gr,
         center = Offset(cx, gy),
     )
-    drawCircle(FireflyGlow.copy(alpha = 0.5f + 0.4f * phase), s * 0.10f, Offset(cx, gy))
+    drawCircle(FireflyGlow.copy(alpha = 0.5f + 0.4f * breathe), s * 0.10f, Offset(cx, gy))
 }

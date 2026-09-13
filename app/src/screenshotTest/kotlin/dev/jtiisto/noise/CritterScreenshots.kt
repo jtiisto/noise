@@ -24,6 +24,7 @@ import dev.jtiisto.noise.core.playback.PlaybackState
 import dev.jtiisto.noise.ui.components.auroraBackground
 import dev.jtiisto.noise.ui.components.rememberMixPalette
 import dev.jtiisto.noise.ui.critter.Critter
+import dev.jtiisto.noise.ui.critter.CritterFrame
 import dev.jtiisto.noise.ui.critter.CritterKind
 import dev.jtiisto.noise.ui.preview.HomeScreenPreview
 import dev.jtiisto.noise.ui.theme.CardShape
@@ -85,6 +86,65 @@ fun CritterGallery() {
                 }
             }
         }
+    }
+}
+
+/**
+ * Key frames of the secondary motion, pinned so a still render can show what
+ * only ever flashes past in the live critter: a frog with eyes open and again
+ * mid-blink (happy arcs), the cat's "z" trail caught at two drift positions, a
+ * whale spout part-way up, and a fox with one ear flicked. [CritterFrame] freezes
+ * the breathe/clock values the live [Critter] animates.
+ */
+@PreviewTest
+@Preview(widthDp = 360, heightDp = 400, showBackground = true, backgroundColor = CRITTER_NIGHT)
+@Composable
+fun CritterMotionFrames() {
+    HushTheme {
+        Box(Modifier.fillMaxSize().auroraBackground(rememberMixPalette(Mix.EMPTY))) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PinnedCell(CritterKind.FROG, Mix.of(SoundId.RAIN to 1f), "Frog open", clock = 0.0f)
+                    PinnedCell(CritterKind.FROG, Mix.of(SoundId.RAIN to 1f), "Frog blink", clock = 0.5f)
+                    PinnedCell(CritterKind.CAT, Mix.EMPTY, "Cat z • early", clock = 0.12f)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PinnedCell(CritterKind.CAT, Mix.EMPTY, "Cat z • late", clock = 0.55f)
+                    PinnedCell(CritterKind.WHALE, Mix.of(SoundId.OCEAN to 1f), "Whale spout", clock = 0.4f)
+                    PinnedCell(CritterKind.FOX, Mix.of(SoundId.CAMPFIRE to 1f), "Fox ear", clock = 0.6f)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PinnedCell(kind: CritterKind, mix: Mix, label: String, clock: Float) {
+    val palette = rememberMixPalette(mix)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier
+                .size(96.dp)
+                .clip(CardShape)
+                .auroraBackground(palette),
+            contentAlignment = Alignment.Center,
+        ) {
+            CritterFrame(
+                kind = kind,
+                breathe = 0.3f,
+                clock = clock,
+                isPlaying = true,
+                palette = palette,
+                size = 84.dp,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = label,
+            color = HushColor.TextSecondary,
+            textAlign = TextAlign.Center,
+            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+        )
     }
 }
 

@@ -32,9 +32,9 @@
 - Motion budget: one breathing animation on the play orb (scale 1.0→1.05 and
   glow alpha, 4 s ease-in-out loop, only while playing), tile selection scale
   spring, animated colour/size for state changes, and the home critter's slow
-  idle breathe/bob (see **Critter**). The critter is the only continuous
-  animation that also runs while paused, and it is deliberately gentle; nothing
-  else animates continuously.
+  idle breathe/bob plus small per-animal secondary motions (see **Critter**).
+  The critter is the only continuous animation that also runs while paused, and
+  it is deliberately gentle; nothing else animates continuously.
 
 ## Screens
 ### Home (single screen, vertical scroll)
@@ -107,14 +107,42 @@ a control.
   Crickets → **firefly** (a soft glowing blink). A mix with no nature sound —
   only noise, only ambience, or empty — gets the default **sleeping cat**,
   curled up with a tiny floating "z", which suits "Hush" and the sleep theme.
-- **Animation.** One `rememberInfiniteTransition` drives a slow, soft
-  breathe-and-bob (2.6 s while playing, 3.8 s while paused, ease-in-out,
-  reversing), read inside the draw lambda so it invalidates drawing without
-  recomposing; the palette is likewise read only in the draw lambda. Two
-  per-animal accents ride the same phase: the cat's "z" drifts up and fades,
-  the firefly's belly blinks. When the lead nature sound changes the animal
-  swaps with a ~360 ms fade-and-scale (`AnimatedContent`). No per-frame
-  allocation that grows, no blur, no heavy Canvas work.
+- **Animation.** **One** `rememberInfiniteTransition` drives **two** looping
+  values, both read inside the draw lambda so an animating critter invalidates
+  drawing without recomposing (the palette is likewise read only there):
+  - **breathe** — a 0..1 triangle (2.6 s while playing, 3.8 s while paused,
+    ease-in-out, reversing) that becomes the whole-body bob-and-breathe and the
+    firefly's belly glow.
+  - **clock** — a 0..1 sawtooth (6 s playing, 9 s paused, linear, restarting;
+    so it drifts one way and repeats rather than bouncing). Every per-animal
+    secondary motion is *derived* from it with pure math — no coroutine, timer
+    or `delay`; a blink is just a smooth Hann-window pulse of the clock
+    (`pulse(clock, center, width)`, unit-tested), so it eases in and out and
+    never strobes.
+- **Per-animal secondary motion** (on top of the shared breathe/bob):
+  - **Cat** — three accent-tinted "z"s that rise up-and-right, grow and fade,
+    staggered a third of the loop apart, so they read as a drifting sleep trail.
+  - **Frog** — an occasional slow blink (eyes ease shut into happy arcs, never a
+    gap) plus a soft throat pulse on the belly.
+  - **Whale** — a steady little fountain with a droplet cluster that rises and
+    fades on the loop; gentle bob.
+  - **Bird** — an occasional blink and a wing that flutters a few degrees.
+  - **Fox** — stays curled and asleep (closed eyes), with an occasional quick
+    ear flick.
+  - **Duck** — a gentle head nod (dip and tilt) and an occasional blink.
+  - **Firefly** — the slow belly-glow blink, with the two wings shimmering
+    softly out of phase.
+- The two blinking-eye critters share one `blinkingEye` helper: a round shiny
+  bead that squashes flat and fades to a happy closed curve as it blinks.
+- Secondary motion is livelier while playing and calmer while paused — the
+  clock simply runs slower when paused (longer period), and the continuous
+  motions (throat, wing flutter, head nod) scale down too.
+- When the lead nature sound changes the animal swaps with a ~360 ms
+  fade-and-scale (`AnimatedContent`). **Cheap by construction:** one transition
+  (never more), no timers or coroutines, no per-frame allocation that grows
+  (the single `Path` is reused; `Offset`/`Size`/`Color` are value classes), no
+  blur, no heavy Canvas work. **No layout change:** the critter is drawn at the
+  same ~54 dp, in the same bottom-centre overlay of the orb's existing box.
 
 ### Sleep timer sheet (modal bottom sheet)
 The sheet answers one question — "how long?" — and its three kinds of answer
@@ -213,4 +241,9 @@ carry: a `CritterGallery` of all seven animals, each on the ground tint of its
 sound, plus the home screen leading with Wind (bird), Stream (duck) and
 Crickets (firefly). The cat, frog, whale and fox already appear in the states
 above (empty mix, the rain trio, paused Ocean, and Campfire + Wind), which the
-critter changed and which were regenerated.
+critter changed and which were regenerated. Because a still render captures one
+instant, the secondary motion would never show; `CritterMotionFrames` therefore
+pins key frames the live critter only passes through — via an internal
+`CritterFrame(kind, breathe, clock, …)` that freezes the animation values — a
+frog eyes-open and mid-blink, the cat's "z" trail at two drift positions, a
+whale spout part-way up and a fox with one ear flicked.
