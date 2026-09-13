@@ -202,9 +202,13 @@ fun HomeScreen(
                             kind = critterFor(mix),
                             isPlaying = state.isPlaying,
                             palette = palette,
+                            // Lifted so the lowest art (cat cushion, frog puddle,
+                            // firefly grass) clears the mix title below the orb;
+                            // still right of centre and overlapping the orb.
+                            size = 126.dp,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .offset(x = 52.dp, y = 18.dp),
+                                .offset(x = 50.dp, y = (-8).dp),
                         )
                     }
 

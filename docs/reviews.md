@@ -138,3 +138,18 @@ transitions, no per-frame allocation, layout untouched. Verified by rendering
 pinned key frames (frog open vs mid-blink, cat z-trail early vs late, whale
 spout, fox ear) in the screenshot harness. Also lowered the Gradle/Kotlin
 daemon heaps (gradle.properties) so the gate fits on the shared build box.
+
+## 2026-09-13 — Codex review of the critter-scenes branch (merged as 0.1.6)
+
+Read-only review of `git diff main..critter-scenes` before merging the bigger
+animated "critter scenes" companion into the shipped app.
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| 1 | Critical | The scene art overlapped the mix-title text on several scenes (empty-mix cat over "Choose a sound", frog over its title incl. 320 dp, firefly grass into "Crickets") — the y=18 dp offset pushed low art past the orb box into the title. | **Fixed** — lifted and slightly shrank the overlay (`size = 126.dp`, `offset(x = 50, y = -8)`); regenerated all goldens and re-verified the title is clear on the cat, frog (360 & 320 dp) and firefly. |
+| 2 | — | Clickability confirmed correct: the critter is a bare Canvas sibling with no pointer modifier, drawn above the orb, so touches pass through. Verified on the emulator (orb toggles when tapped under the overlap). | No change. |
+| 3 | — | Performance clean: `breathe`/`clock` read only inside the draw lambda (redraw, not recompose); Paths reused from a pool; fixed-range loops, no per-frame collection allocation. | No change. |
+| 4 | Low (follow-up) | `softGlow()` builds a fresh `Brush.radialGradient` per call (1–4×/frame, firefly worst), mirroring the shipped `Critter.kt` pattern — bounded, not a leak, but a GC-pressure follow-up if low-end profiling shows it. | Accepted; noted for follow-up. |
+| 5 | Nit | Kover-exclusion comment for `ui.critterscenes` said "never referenced by the shipped app", untrue once wired into HomeScreen. | **Fixed** — comment corrected (drawing-only Compose, verified by the screenshot harness). |
+
+Correctness/layout otherwise clean (exhaustive `when(kind)`, safe `variant` default, no NaN/div-by-zero, 320 dp fine). Merged to main as 0.1.6; the parallel-install identity (`.scenes` / "Hush Scenes") was reverted for the real release.

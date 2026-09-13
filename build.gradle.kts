@@ -39,11 +39,12 @@ kover {
                 )
                 packages(
                     "dev.jtiisto.noise.ui.theme",
-                    // Draft "critter scenes" art — a parallel design exploration
-                    // (static Compose vector mockups, rendered only by the
-                    // screenshot harness). It is never referenced by the shipped
-                    // app; like the theme package and Composables above it is
-                    // excluded from the production coverage metric.
+                    // "Critter scenes" — the animated companion vector art wired
+                    // into the home screen. It is drawing-only Compose (Canvas
+                    // draw lambdas the @Composable filter cannot see), verified by
+                    // the screenshot harness rather than unit tests, so like the
+                    // theme package and Composables above it is excluded from the
+                    // production coverage metric.
                     "dev.jtiisto.noise.ui.critterscenes",
                 )
                 annotatedBy("androidx.compose.runtime.Composable")

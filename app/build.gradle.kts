@@ -19,8 +19,8 @@ android {
 
     defaultConfig {
         applicationId = "dev.jtiisto.noise"
-        versionCode = 6
-        versionName = "0.1.5"
+        versionCode = 7
+        versionName = "0.1.6"
     }
 
     signingConfigs {
@@ -36,10 +36,6 @@ android {
 
     buildTypes {
         release {
-            // Branch "critter-scenes": install ALONGSIDE the shipped app so the
-            // parallel version can be tried without replacing 0.1.5.
-            applicationIdSuffix = ".scenes"
-            versionNameSuffix = "-scenes"
             // Modest hardware: shrink code and resources, strip unused icons.
             isMinifyEnabled = true
             isShrinkResources = true
