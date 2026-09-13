@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -222,6 +224,109 @@ private fun SceneCell(kind: CritterKind, label: String, tile: androidx.compose.u
             color = HushColor.TextSecondary,
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
+
+
+/**
+ * PLACEMENT STUDY (owner direction 2026-09-13): chosen variants — frog umbrella,
+ * duck bottoms-up — moved RIGHT OF CENTRE at the orb-base height, allowed to
+ * overlap the play/pause glyph. In the real build the scene is decorative (no
+ * pointer input), so the whole orb stays clickable under the overlap.
+ */
+@PreviewTest
+@Preview(widthDp = 411, heightDp = 900, showBackground = true, backgroundColor = 0xFF0B0F1AL)
+@Composable
+fun ScenePlacementRightOfCentre() {
+    HushTheme {
+        Column(
+            Modifier.fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            OrbPlacementCell(
+                label = "Thunderstorm + Rain",
+                mix = Mix.of(SoundId.THUNDERSTORM to 0.7f, SoundId.RAIN to 0.5f),
+                kind = CritterKind.FROG,
+                variant = 0,
+                paused = false,
+            )
+            OrbPlacementCell(
+                label = "Stream + Crickets",
+                mix = Mix.of(SoundId.STREAM to 0.6f, SoundId.CRICKETS to 0.5f),
+                kind = CritterKind.DUCK,
+                variant = 1,
+                paused = true,
+            )
+            OrbPlacementCell(
+                label = "Nothing playing",
+                mix = Mix.EMPTY,
+                kind = CritterKind.CAT,
+                variant = 0,
+                paused = true,
+            )
+        }
+    }
+}
+
+/**
+ * A mock of the home orb area: the 200 dp orb rings + a play/pause glyph, with
+ * the scene overlaid right-of-centre at the base. Mirrors the real layout so the
+ * overlap can be judged; the real HomeScreen is NOT touched by this study.
+ */
+@Composable
+private fun OrbPlacementCell(
+    label: String,
+    mix: Mix,
+    kind: CritterKind,
+    variant: Int,
+    paused: Boolean,
+) {
+    val palette = rememberMixPalette(mix)
+    Box(
+        Modifier.fillMaxWidth().height(268.dp).auroraBackground(palette),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(200.dp), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.size(200.dp)) {
+                val accent = palette.value.accent
+                val c = Offset(size.width / 2f, size.height / 2f)
+                val ring = size.minDimension / 2f
+                drawCircle(accent.copy(alpha = 0.08f), ring, c)
+                drawCircle(accent.copy(alpha = 0.12f), ring * 0.86f, c)
+                // solid orb face
+                drawCircle(accent.copy(alpha = 0.30f), ring * 0.62f, c)
+                drawCircle(accent.copy(alpha = 0.55f), ring * 0.60f, c)
+                // play triangle or pause bars
+                val g = HushColor.Foreground.copy(alpha = 0.92f)
+                if (paused) {
+                    val bw = ring * 0.06f; val bh = ring * 0.28f
+                    drawRoundRect(g, topLeft = Offset(c.x - bw * 2.4f, c.y - bh), size = androidx.compose.ui.geometry.Size(bw * 1.6f, bh * 2), cornerRadius = androidx.compose.ui.geometry.CornerRadius(bw)) 
+                    drawRoundRect(g, topLeft = Offset(c.x + bw * 0.8f, c.y - bh), size = androidx.compose.ui.geometry.Size(bw * 1.6f, bh * 2), cornerRadius = androidx.compose.ui.geometry.CornerRadius(bw))
+                } else {
+                    val t = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(c.x - ring * 0.16f, c.y - ring * 0.22f)
+                        lineTo(c.x - ring * 0.16f, c.y + ring * 0.22f)
+                        lineTo(c.x + ring * 0.24f, c.y)
+                        close()
+                    }
+                    drawPath(t, g)
+                }
+            }
+            // The scene: right of centre, at the base height, overlapping the orb.
+            CritterScene(
+                kind = kind,
+                palette = palette,
+                variant = variant,
+                size = 138.dp,
+                modifier = Modifier.align(Alignment.BottomCenter).offset(x = 52.dp, y = 20.dp),
+            )
+        }
+        Text(
+            text = label,
+            color = HushColor.TextTertiary,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp),
         )
     }
 }
