@@ -55,9 +55,11 @@ data class EngineConfig(
   RMS is **-20 dBFS ± 1 dB** (per channel) so switching sounds never jumps.
   Crickets are the one exception at **-26 dBFS ± 1.5 dB** (tonal content at
   equal RMS sounds much louder). Peaks are typically -8 to -3 dBFS; the
-  low-frequency sounds (ocean swell, campfire pops) reach ~-2.4 dBFS, because
-  Gaussian low-frequency content genuinely peaks at 4 sigma. The gate is
-  peak ≤ 0.9 so three layers still fit in the headroom.
+  low-frequency sounds (ocean swell) reach ~-2.4 dBFS, because Gaussian
+  low-frequency content genuinely peaks at 4 sigma. The campfire's bright cracks
+  are peaky too (crest ~27 dB before limiting) and are held to ~-1.3 dBFS by a
+  soft limiter (see docs/sound-design.md). The gate is peak ≤ 0.9 so three
+  layers still fit in the headroom.
 - Mix: `sum(layerGain(id) * generator) * master * fadeEnv * duckEnv`, then a
   cheap soft clipper (input clamped to ±3, `x*(27+x²)/(27+9x²)`, output
   clamped to ±1 — the rational form reaches exactly ±1 at ±3 and
@@ -158,14 +160,25 @@ Nature:
   drifts slowly ±0.3 and is applied to the howl and whistle only — below
   ~100 Hz the ear cannot localise, and panning the buffet would unbalance the
   channels as the image drifts.
-- **Campfire** — rumble: brown (HP 55 Hz) → LP 120 Hz with slow flutter;
-  crackles: Poisson 4–12/s (the rate itself drifts slowly across that range),
-  each 3–25 ms burst through a resonant BP at 900 Hz–5 kHz, random pan and
-  amplitude, occasional (1 in 15) louder "pop"; hiss: white → BP 3–7 kHz with
-  fast flutter (~8 Hz filtered-noise AM). The rumble/crackle/hiss balance is
-  set from octave-band measurement rather than from relative dB alone: with
-  the crackles 20 dB under the sub-60 Hz rumble they are inaudible on a phone
-  speaker.
+- **Campfire** — rumble: brown (HP 55 Hz) → LP 120 Hz with slow flutter, a
+  low supporting bed; hiss: white → BP 2.5–9 kHz with fast flutter (~8 Hz
+  filtered-noise AM), the continuous sizzle; crackles: three impulsive event
+  types emitted in irregular *flurries* (each Poisson trigger, at a rate that
+  drifts across the preset range, is a head that spawns 0–3 rapid follow-ons),
+  each with a *near-instant* attack (~0.1–0.35 ms, not the beds' soft
+  difference-of-exponentials rise) and randomised level/decay/brightness/pan:
+  **bright snaps** (the majority) — broadband white, gently HP ~1.1 kHz then LP
+  3–7 kHz, decay 2–9 ms, *no resonance* (a real crack is a broadband click, not
+  a pitched ring); **mid crackles** — dimmer, 0.6–3.5 kHz; **low woody pops**
+  (occasional) — a resonant thump at 150–480 Hz (Q 1.5–3.5), the body that says
+  "logs" rather than a merely louder crack. This replaces the earlier single
+  resonant-BP crackle (900 Hz–5 kHz, Q 5–14) on the beds' soft envelope, which
+  measured soft, dull, pitched and uniform and read as artificial/rain-like. A
+  bright fire is inherently peaky; the beds stay low (so cracks are not swamped)
+  and a gentle soft limiter holds the peak under the 0.9 ceiling without dulling
+  the cracks' onset. The crackle character is tuned against real fire recordings
+  (see docs/sound-design.md and `research/compare_fire.py`), not by octave-band
+  balance alone.
 - **Stream** — 6 bubble *size classes* (BP, Q 3–5) spread geometrically
   400 Hz–5 kHz, each excited by its **own Poisson stream of 30–70 short noise
   bursts per second** (difference-of-exponentials, 15–60 ms, attack 1/5 of the
@@ -242,7 +255,12 @@ inaudible crackle layer. See `docs/sound-design.md`.
   range, min/max ratio > 12 dB. Crickets: dominant peak in 3.5–5.3 kHz plus a
   chirp duty cycle that proves the phrases pause. Thunderstorm: 0.5–2.6 rolls
   per minute and a peak no more than 8 dB over the median bed. Campfire:
-  crackle rate inside the preset range. Wind and stream: dominant peak inside
+  crackle rate inside the preset range, and — the assertion that would have
+  caught the soft/pitched/rain-like crackle — the cracks are impulsive and
+  broadband: per-crack 10–90 % attack p10 < 0.5 ms and median < 1 ms, spectral
+  flatness median > 0.12 (far above the old resonant crackle's ~0.03), centroid
+  median > 3 kHz and a wide centroid spread, measured on the un-limited crack
+  shape with the shared FFT utilities. Wind and stream: dominant peak inside
   the designed band. Downpour: measurably fuller low end than light rain.
 - Every DSP primitive has its own tests: RNG range/mean/variance/seeding,
   measured biquad magnitude responses and stability at extreme settings,

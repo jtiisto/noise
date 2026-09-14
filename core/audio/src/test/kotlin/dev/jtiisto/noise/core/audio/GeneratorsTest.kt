@@ -83,12 +83,22 @@ class GeneratorsTest {
     @Test
     @DisplayName("presets are honoured, not ignored")
     fun presetsChangeTheSound() {
+        // Halving outputGain should drop the level by ~6 dB — but only in the
+        // linear region. The campfire's soft limiter engages on peaks at the
+        // default gain, so comparing DEFAULT against DEFAULT/2 would measure the
+        // limiter's (intended) compression, not the preset. Both gains here sit
+        // well below the limiter knee, so this cleanly checks that outputGain is
+        // honoured rather than ignored.
         val quietFire = CampfireGenerator(
+            48_000,
+            5L,
+            CampfirePreset.DEFAULT.copy(outputGain = CampfirePreset.DEFAULT.outputGain / 4f),
+        )
+        val loudFire = CampfireGenerator(
             48_000,
             5L,
             CampfirePreset.DEFAULT.copy(outputGain = CampfirePreset.DEFAULT.outputGain / 2f),
         )
-        val loudFire = CampfireGenerator(48_000, 5L, CampfirePreset.DEFAULT)
         val quiet = SignalAnalysis.rmsDb(RenderHarness.renderGenerator(quietFire, 5.0, 2.0).left)
         val loud = SignalAnalysis.rmsDb(RenderHarness.renderGenerator(loudFire, 5.0, 2.0).left)
         assertEquals(-6.0, quiet - loud, 0.5)

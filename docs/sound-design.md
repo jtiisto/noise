@@ -234,27 +234,90 @@ gust depth and rate, swell interval/length, pan drift, buffet level and band.
 
 ## Campfire
 
+The original crackle was a short noise burst through a single *resonant*
+band-pass sharing rain's soft difference-of-exponentials envelope (attack/decay
+ratio 8, ~3.4 ms rise). Measured against real recordings it was the wrong sound
+in three ways at once — soft (attack ~2.5-3.4 ms where a real crack is ~0.1 ms),
+dull and pitched (spectral flatness ~0.02, centroid ~1.4 kHz — a narrow ring),
+and uniform (all cracks alike) — which is exactly why reviewers heard it as
+artificial and its sharper cracks as *rain*. A real fire's cracks are the
+opposite: **impulsive** (a near-instant broadband click), **bright/broadband**
+(energy well up past 4 kHz, not a pitched ring), and **varied** (low woody pops
+through bright snaps), arriving in irregular flurries rather than an even stream.
+So the crackle was rebuilt as three event types over the (kept) rumble and hiss
+beds:
+
 * **Rumble** — brown noise under 120 Hz (high-passed at 55 Hz) with a slow
-  flutter: the convection column, and what makes a fire feel *near*.
-* **Hiss** — white through 3-7 kHz with a fast random amplitude flutter around
-  8 Hz: steam escaping the wood. The flutter is filtered noise rather than an
-  LFO, because a fixed rate reads as tremolo.
-* **Crackles** — a Poisson stream, 4-12 per second, each a 3-25 ms burst
-  through a *resonant* band-pass (900 Hz-5 kHz, Q 5-14). The resonance is the
-  whole point: a crackle is a small cavity failing and the cavity has a pitch;
-  a plain low-passed tick reads as static. One in fifteen is a "pop" at 3.2x
-  the level, which is the single detail that makes people call it a real fire.
-  The crackle rate itself drifts between 4 and 12/s over minutes, so the fire
-  flares and settles.
+  flutter: the convection column, and what makes a fire feel *near*. It is now a
+  supporting bed, well down from its old level (a bright fire is only ~8-15 %
+  sub-120 Hz), because a loud rumble both dulls the sound and — being high-
+  amplitude low-frequency — swamps the cracks.
+* **Hiss** — white through 2.5-9 kHz with a fast random amplitude flutter around
+  8 Hz: the continuous steam sizzle. Filtered noise, not an LFO, because a fixed
+  rate reads as tremolo.
+* **Bright snaps** (the majority) — a broadband white burst with a *near-instant*
+  attack (~0.1-0.35 ms 10-90 % rise) and a short decay (2-9 ms), gently
+  high-passed (~1.1 kHz) and low-passed high (3-7 kHz). No resonance: a real
+  crack is an impulsive click, so running it through a narrow band-pass is what
+  made the old one read as static. The high-pass only crisps and lightly colours
+  it — it stays a broad band over an octave wide, not a ring.
+* **Mid crackles** — dimmer, a touch longer, through a lower band (~0.6-3.5 kHz).
+* **Low woody pops** (occasional) — the body that says "logs": a short burst
+  through a low *resonant* band (150-480 Hz, Q 1.5-3.5) with a slightly longer
+  decay. This replaces the old "just louder" pop — a loud crack that is also
+  *low and woody*, not merely a bright crack turned up.
+* **Flurries** — cracks are not an even Poisson stream. Each Poisson trigger is a
+  flurry *head* that spawns 0-3 rapid follow-ons (a capped geometric tail,
+  ~10-55 ms apart), so cracks cluster the way a real fire's do. The trigger clock
+  runs at the target rate divided by the mean flurry size, so the *audible*
+  density still lands in the preset's crackles-per-second range, which itself
+  drifts over minutes so the fire flares and settles.
 
-The rumble/crackle balance was set from octave-band measurements, not by ear
-alone: the first version had the crackles 20 dB under the sub-60 Hz rumble,
-which on a phone speaker is a fire you cannot hear. Measured rate: 6.7
-crackles/s.
+The near-instant attack needed a new voice: `EventVoicePool` gained an
+attack-parameterised `startVoice` (the fast term's time constant set from an
+explicit attack rather than the fixed decay/8), so a voice can snap open in a
+fraction of a millisecond and still decay over several. It stays a smooth
+exponential rise from zero (no DC-step click) and costs one `pow` per *spawn*,
+never per sample. The broadband snap/mid path reuses `NoiseBurstVoicePool` (the
+raindrop's white → one-pole low-pass, now with an optional gentle one-pole
+high-pass); the woody pop reuses `ResonantBurstVoicePool`. Both stay
+allocation-free (fixed pools, struct-of-arrays) and deterministic (seeded), and
+events are mono and panned like rain's drops (L/R correlation ~0.46, inside the
+0.95 the spec allows event-dominated sounds).
 
-Knobs (`CampfirePreset`): crackle rate range, duration/pitch/Q ranges, crackle
-and pop levels, pop probability, rumble cutoff/level/flutter, hiss band and
-level.
+**Loudness and peaks.** A bright crackling fire is inherently very peaky — sparse
+loud cracks over a quiet floor, a crest factor near 27 dB — while the engine
+calibrates every sound to -20 dBFS RMS with the peak under the 0.9 three-layer
+ceiling (≈19 dB crest). That gap cannot be closed with a louder bed (a bed loud
+enough to raise the RMS floor swamps the cracks and dulls the sound), so the
+generator keeps the beds low and applies a gentle soft limiter (tanh above a
+0.62 knee, asymptoting to a 0.86 ceiling) that catches only the loudest cracks —
+enough to hold the peak under 0.9 without squashing the ordinary cracks' sharp
+onset. Level variety per crack is kept modest (a flat spread, not the drops'
+squared-uniform) precisely so a heavy tail of rare-loud snaps does not inflate
+the crest the limiter then has to remove. `outputGain` is the measured
+calibration constant (currently 0.72) as for every other generator.
+
+**Tuning method.** The crackle was tuned by rendering the offline WAV and
+comparing its per-crack transient metrics — attack sharpness, spectral flatness,
+spectral centroid and their spread, and the fraction of energy above 4 kHz —
+against real campfire recordings (a bright Commons fire as the primary target
+and a low woody CC0 fire), with `research/compare_fire.py`. Measured (final,
+through `MixRenderer`) against the bright reference: attack p10 **0.27 ms** (real
+~0.1, old ~2.5), flatness median **0.43** (real ~0.13-0.28, old ~0.02), centroid
+median **5.2 kHz** (real ~3.9-4.8, old ~1.4 kHz), energy >4 kHz **0.45** (real
+~0.42, old ~0.15), centroid spread **1.1-7.1 kHz** (wide, like the real
+0.3-7.8 kHz; old was a narrow 0.9-2.4 kHz), and ~15 % of the energy below 120 Hz
+(bright, like the reference; the old design and the woody CC0 fire sit near
+70 %). `NatureGeneratorTest` asserts the crack *design* on the un-limited shape
+(sharp p10 and median attack, broadband flatness far above the old ~0.03, high
+and wide centroid), and `GeneratorCalibrationTest` asserts the -20 dBFS level and
+the 0.9 peak ceiling on the calibrated output.
+
+Knobs (`CampfirePreset`): crackle rate range and flurry probability/spacing; per
+type (snap / mid / woody) the attack, decay, band and level ranges; woody-pop
+centre and Q; rumble cutoff/level/flutter; hiss band and level; soft-limiter
+knee/ceiling; `outputGain`.
 
 ## Stream
 

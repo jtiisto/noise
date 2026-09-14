@@ -23,10 +23,14 @@ internal val Project.derivedNamespace: String
 
 /** JUnit platform for unit tests plus the shared test dependencies every module gets. */
 internal fun Project.configureUnitTests() {
+    // DSP statistical tests render seconds of audio; give the fork headroom.
+    // Overridable (e.g. in ~/.gradle/gradle.properties) for memory-constrained
+    // build boxes where the combined daemon + test-fork footprint must stay
+    // under a memory guard: -PnoiseTestHeap=640m.
+    val testHeap = providers.gradleProperty("noiseTestHeap").orElse("1g")
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
-        // DSP statistical tests render seconds of audio; give them headroom.
-        maxHeapSize = "1g"
+        maxHeapSize = testHeap.get()
     }
     dependencies {
         "testImplementation"(libs.findLibrary("junit-jupiter").get())

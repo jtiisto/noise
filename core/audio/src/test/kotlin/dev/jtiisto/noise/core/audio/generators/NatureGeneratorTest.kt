@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.ln
 
 /**
  * Behavioural assertions for the event-driven nature sounds: not "does it make
@@ -147,6 +149,72 @@ class NatureGeneratorTest {
         assertTrue(
             rate in (preset.cracklesPerSecondMin * 0.8)..(preset.cracklesPerSecondMax * 1.2),
             "crackle rate $rate/s is outside the ${preset.cracklesPerSecondMin}-${preset.cracklesPerSecondMax}/s design range",
+        )
+    }
+
+    @Test
+    @DisplayName("campfire cracks are impulsive and broadband, not soft pitched blips")
+    fun campfireCracksAreSharpAndBroadband() {
+        // This asserts the crackle *design* — a real fire's cracks are near-
+        // instant broadband clicks (measured attack ~0.1 ms, spectral flatness
+        // ~0.13-0.28, centroid ~4-5 kHz, wide centroid spread) — where the old
+        // resonant-band crackle was soft (attack ~3 ms) and pitched (flatness
+        // ~0.02, narrow). Metrics after Farnell/`compare_fire.py`, computed here
+        // with the shared FFT utilities.
+        //
+        // We measure the crack *shape* with the -20 dBFS peak limiter effectively
+        // disabled (a low output gain, well under its knee), so this isolates the
+        // synthesis from the peak-limiting the loudness calibration must apply to
+        // so peaky a sound — the 0.9 peak ceiling is `GeneratorCalibrationTest`'s
+        // job, not this one.
+        val preset = CampfirePreset.DEFAULT.copy(outputGain = 0.15f)
+        val gen = CampfireGenerator(RenderHarness.SAMPLE_RATE, SEED, preset)
+        val capture = RenderHarness.renderGenerator(gen, seconds = 20.0, warmUpSeconds = 3.0)
+        val sr = capture.sampleRate
+        val mono = FloatArray(capture.frames) { (capture.left[it] + capture.right[it]) * 0.5f }
+
+        val onsets = detectCrackOnsets(mono, sr)
+        assertTrue(onsets.size >= 30, "only ${onsets.size} crack events detected")
+
+        val attacks = ArrayList<Double>()
+        val flatness = ArrayList<Double>()
+        val centroids = ArrayList<Double>()
+        val pre = (sr * 0.002).toInt()
+        val post = (sr * 0.030).toInt()
+        for (c in onsets) {
+            val lo = (c - pre).coerceAtLeast(0)
+            val hi = (c + post).coerceAtMost(mono.size)
+            if (hi - lo < 512) continue
+            val seg = mono.copyOfRange(lo, hi)
+            attacks += attackRiseMs(seg, sr)
+            val psd = SignalAnalysis.welchPsd(seg, 256)
+            flatness += spectralFlatness(psd)
+            centroids += spectralCentroid(psd, sr)
+        }
+
+        val atkP10 = quantile(attacks, 0.10)
+        val atkMed = quantile(attacks, 0.50)
+        val flatMed = quantile(flatness, 0.50)
+        val centMed = quantile(centroids, 0.50)
+        val centP10 = quantile(centroids, 0.10)
+        val centP90 = quantile(centroids, 0.90)
+        println(
+            "campfire cracks: attack p10 %.2f ms med %.2f ms | flatness med %.2f | centroid med %.0f Hz spread %.0f-%.0f".format(
+                atkP10, atkMed, flatMed, centMed, centP10, centP90,
+            ),
+        )
+
+        // Impulsive: the sharp cracks rise in a fraction of a millisecond (the
+        // old design's sharpest was ~2.5 ms), and the typical crack well under 1 ms.
+        assertTrue(atkP10 < 0.5, "sharpest cracks rise in ${"%.2f".format(atkP10)} ms, not impulsive (< 0.5 ms)")
+        assertTrue(atkMed < 1.0, "median crack attack ${"%.2f".format(atkMed)} ms is too soft (>= 1 ms)")
+        // Broadband, not a pitched resonant ring: flatness far above the old ~0.03.
+        assertTrue(flatMed > 0.12, "median flatness ${"%.2f".format(flatMed)} is not broadband (old resonant crackle was ~0.03)")
+        // Bright, and varied from low woody pops to bright snaps (wide spread).
+        assertTrue(centMed > 3_000, "median centroid ${"%.0f".format(centMed)} Hz is too dull (< 3 kHz)")
+        assertTrue(
+            centP10 < 2_500 && centP90 > 5_500,
+            "centroid spread ${"%.0f".format(centP10)}-${"%.0f".format(centP90)} Hz is too narrow/uniform",
         )
     }
 
@@ -519,6 +587,114 @@ class NatureGeneratorTest {
             out[i] = sum / count
         }
         return out
+    }
+
+    // ---- Campfire crack-transient analysis (mirrors research/compare_fire.py) --
+
+    /**
+     * Onset sample indices of the loudest transients: the top 1 % of a 3 ms
+     * moving-average of |x|, thinned to one per 30 ms and snapped to the local
+     * peak. This is the same detector the offline `compare_fire.py` uses.
+     */
+    private fun detectCrackOnsets(x: FloatArray, sampleRate: Int): List<Int> {
+        val win = (sampleRate * 0.003).toInt().coerceAtLeast(1)
+        val smooth = movingAverageAbs(x, win)
+        val threshold = quantileFloat(smooth, 0.99)
+        val minSpacing = (sampleRate * 0.030).toInt()
+        val lookBack = (sampleRate * 0.002).toInt()
+        val lookAhead = (sampleRate * 0.030).toInt()
+        val onsets = ArrayList<Int>()
+        var last = Int.MIN_VALUE / 2
+        var i = 0
+        while (i < smooth.size) {
+            if (smooth[i] > threshold && i - last > minSpacing) {
+                val lo = (i - lookBack).coerceAtLeast(0)
+                val hi = (i + lookAhead).coerceAtMost(x.size)
+                var peak = lo
+                var best = -1f
+                for (j in lo until hi) {
+                    val a = abs(x[j])
+                    if (a > best) { best = a; peak = j }
+                }
+                if (onsets.isEmpty() || peak - onsets.last() > minSpacing) {
+                    onsets += peak
+                    last = peak
+                }
+            }
+            i++
+        }
+        return onsets
+    }
+
+    private fun movingAverageAbs(x: FloatArray, win: Int): FloatArray {
+        val out = FloatArray(x.size)
+        var sum = 0.0
+        for (i in x.indices) {
+            sum += abs(x[i])
+            if (i >= win) sum -= abs(x[i - win])
+            val n = if (i < win) i + 1 else win
+            out[i] = (sum / n).toFloat()
+        }
+        return out
+    }
+
+    /** 10-90 % rise time of |seg| up to its peak, in milliseconds. */
+    private fun attackRiseMs(seg: FloatArray, sampleRate: Int): Double {
+        var peak = 0f
+        var peakIndex = 0
+        for (i in seg.indices) {
+            val a = abs(seg[i])
+            if (a > peak) { peak = a; peakIndex = i }
+        }
+        if (peak < 1e-4f) return Double.MAX_VALUE
+        var i10 = -1
+        var i90 = -1
+        for (i in 0..peakIndex) {
+            val a = abs(seg[i])
+            if (i10 < 0 && a >= 0.1f * peak) i10 = i
+            if (a >= 0.9f * peak) { i90 = i; break }
+        }
+        if (i10 < 0 || i90 < 0) return Double.MAX_VALUE
+        return (i90 - i10).toDouble() / sampleRate * 1000.0
+    }
+
+    /** Wiener spectral flatness (geometric mean / arithmetic mean) over the band, DC excluded. */
+    private fun spectralFlatness(psd: DoubleArray): Double {
+        var logSum = 0.0
+        var linSum = 0.0
+        var n = 0
+        for (k in 1 until psd.size) {
+            val p = psd[k] + 1e-12
+            logSum += ln(p)
+            linSum += p
+            n++
+        }
+        if (n == 0 || linSum <= 0.0) return 0.0
+        return exp(logSum / n) / (linSum / n)
+    }
+
+    private fun spectralCentroid(psd: DoubleArray, sampleRate: Int): Double {
+        val fftSize = (psd.size - 1) * 2
+        val binHz = sampleRate.toDouble() / fftSize
+        var num = 0.0
+        var den = 0.0
+        for (k in psd.indices) {
+            num += k * binHz * psd[k]
+            den += psd[k]
+        }
+        return if (den <= 0.0) 0.0 else num / den
+    }
+
+    private fun quantile(values: List<Double>, q: Double): Double {
+        if (values.isEmpty()) return Double.NaN
+        val sorted = values.sorted()
+        return sorted[((sorted.size - 1) * q).toInt()]
+    }
+
+    private fun quantileFloat(values: FloatArray, q: Double): Float {
+        val sorted = values.copyOf()
+        sorted.sort()
+        return sorted[((sorted.size - 1) * q).toInt()]
     }
 
     private companion object {
