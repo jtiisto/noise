@@ -38,7 +38,7 @@ network.
 
 ## Download
 
-Grab the latest signed APK: **[`dist/hush-0.1.6.apk`](dist/hush-0.1.6.apk?raw=1)**
+Grab the latest signed APK: **[`dist/hush-0.1.7.apk`](dist/hush-0.1.7.apk?raw=1)**
 (1.7 MB, Android 8.0+), or from the
 [Releases page](../../releases/latest).
 
