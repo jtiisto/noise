@@ -10,8 +10,20 @@ interface AudioFocusGate {
     /** Requests focus. Returns false when the system refuses; the caller must stay paused. */
     fun request(): Boolean
 
-    /** Releases focus and stops listening for headphone unplugs. Idempotent. */
+    /** Releases focus. Idempotent. Does not change headphone-unplug monitoring. */
     fun abandon()
+
+    /**
+     * Starts or stops listening for headphone unplugs ([FocusEvent.BECOMING_NOISY]).
+     * Idempotent. Deliberately independent of [request]: playback review #3
+     * (ported from Notch 2026-09-15) found that tying the receiver to focus
+     * ownership meant "mix with other apps" — the setting whose whole purpose is
+     * to never ask for focus — also silently turned off unplug detection, so
+     * pulling the headphones out blared noise through the speaker. The controller
+     * turns this on whenever the engine starts rendering and off on every path
+     * that stops it, whether or not focus was involved.
+     */
+    fun setNoisyMonitoring(enabled: Boolean)
 
     /**
      * Focus changes, hot. Emissions are dropped rather than buffered forever if

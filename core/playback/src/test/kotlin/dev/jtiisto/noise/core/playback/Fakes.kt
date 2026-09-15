@@ -125,6 +125,12 @@ class FakeAudioFocusGate : AudioFocusGate {
     var abandonCount = 0
         private set
 
+    /** Current unplug-monitoring state and how many times it actually toggled. */
+    var noisyMonitoring = false
+        private set
+    var noisyMonitoringChanges = 0
+        private set
+
     private val _events = MutableSharedFlow<FocusEvent>(extraBufferCapacity = 16)
     override val events: Flow<FocusEvent> = _events.asSharedFlow()
 
@@ -135,6 +141,11 @@ class FakeAudioFocusGate : AudioFocusGate {
 
     override fun abandon() {
         abandonCount++
+    }
+
+    override fun setNoisyMonitoring(enabled: Boolean) {
+        if (enabled != noisyMonitoring) noisyMonitoringChanges++
+        noisyMonitoring = enabled
     }
 
     fun emit(event: FocusEvent) {

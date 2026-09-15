@@ -33,6 +33,11 @@ internal class HushPlayer(
         .addAll(
             Player.COMMAND_PLAY_PAUSE,
             Player.COMMAND_STOP,
+            // Without this, SimpleBasePlayer.release() is a no-op: it checks the
+            // available commands first, so neither its own base cleanup nor
+            // handleRelease() ran when the service was destroyed — the media
+            // session leaked (playback review #7, ported from Notch 2026-09-15).
+            Player.COMMAND_RELEASE,
             Player.COMMAND_GET_CURRENT_MEDIA_ITEM,
             Player.COMMAND_GET_TIMELINE,
             Player.COMMAND_GET_METADATA,

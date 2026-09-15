@@ -38,9 +38,19 @@ controller already ignores a completion whose fade generation no longer matches
 (2026-09-12 review #3). So the P4 scenario is already covered; the SessionGuard
 machinery would add complexity without a reachable Hush bug.
 
-Still pending: the playback findings **P3** (BECOMING_NOISY receiver registered
-only while holding focus), **P5** (restore requests focus before the foreground
-service exists), and **P7 first half** (`COMMAND_RELEASE` not advertised).
+## 2026-09-15 — Ported the (Hush too) playback findings (P3, P5, P7)
+
+The playback half of the follow-up. All three were present in Hush.
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| P3 | High | The headphone-unplug (`BECOMING_NOISY`) receiver was registered only when a focus request was granted, so "Mix with other apps" — which never requests focus — left unplug detection off, and pulling the headphones out blared the speaker. | **Fixed** — a new `AudioFocusGate.setNoisyMonitoring(enabled)`, independent of `request()`/`abandon()`; the controller arms it whenever the engine starts rendering and disarms it on every stop, focus or not. `PlaybackNoisyAndRestoreTest`. |
+| P5 | High | Restore requested audio focus before the foreground service existed; from API 31 the system refuses focus to a background app, so a sticky restart never resumed. | **Fixed** — `startPlayback(startServiceFirst = true)` on the restore path promotes the service first, and one retry 1.5 s later covers the service still being promoted (stood down by any user command). Three tests. |
+| P7 | Medium (first half) | `COMMAND_RELEASE` was not advertised, so `SimpleBasePlayer.release()` in the service's `onDestroy` was a no-op and the media session leaked. | **Fixed** — the command is advertised. Hush's `handleRelease` already pauses the controller, which is correct on a real destroy (Hush has no service-less playback like Notch's matching), so only the first half applies. |
+
+With this the shared-code subset of the Notch review is fully ported (E1–E3 in
+d20c5ed, E4/E8/E9/E10 in b7574ff, P3/P5/P7 here), except P4, deliberately not
+ported for the reason above.
 
 ## 2026-09-12 — Codex review #1 (first integrated build, commit 96ebc6c)
 

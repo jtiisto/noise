@@ -42,18 +42,18 @@ class AndroidAudioFocusGate(context: Context) : AudioFocusGate {
         .setOnAudioFocusChangeListener { change -> emit(change.toFocusEvent()) }
         .build()
 
-    /** Non-null exactly while we hold focus; headphone unplugs only matter then. */
+    /** Non-null exactly while unplug monitoring is on; see [setNoisyMonitoring]. */
     private var noisyReceiver: BroadcastReceiver? = null
 
-    override fun request(): Boolean {
-        val granted = audioManager.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-        if (granted) registerNoisyReceiver()
-        return granted
-    }
+    override fun request(): Boolean =
+        audioManager.requestAudioFocus(focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
 
     override fun abandon() {
-        unregisterNoisyReceiver()
         audioManager.abandonAudioFocusRequest(focusRequest)
+    }
+
+    override fun setNoisyMonitoring(enabled: Boolean) {
+        if (enabled) registerNoisyReceiver() else unregisterNoisyReceiver()
     }
 
     private fun registerNoisyReceiver() {

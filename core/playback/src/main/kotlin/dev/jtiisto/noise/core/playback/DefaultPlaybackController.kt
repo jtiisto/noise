@@ -75,6 +75,9 @@ class DefaultPlaybackController(
     /** Open once [restore] has applied the persisted state; until then commands queue. */
     private var restored = false
 
+    /** Set by any user command so a restore's auto-resume retry stands down. */
+    private var userCommandSinceRestore = false
+
     /** Commands issued before the persisted state landed, replayed in arrival order. */
     private val pendingCommands = ArrayDeque<() -> Unit>()
 
@@ -196,21 +199,36 @@ class DefaultPlaybackController(
 
     // ------------------------------------------------------------ state machine
 
-    /** Returns true when playback is running afterwards. */
-    private fun startPlayback(): Boolean {
+    /**
+     * Returns true when playback is running afterwards.
+     *
+     * [startServiceFirst] brings the foreground service up *before* the focus
+     * request instead of after it. Playback review #5 (ported from Notch): from
+     * API 31 the system refuses focus to an app with no visible activity and no
+     * running foreground service — exactly a sticky restart resuming from disk,
+     * where the restore requested focus, was refused, and the sound never came
+     * back. Only [restore] passes it; an ordinary play() has a visible activity
+     * and should not leave a service behind when focus is denied.
+     */
+    private fun startPlayback(startServiceFirst: Boolean = false): Boolean {
         val current = _state.value
         if (current.isPlaying) return true
         if (current.mix.isEmpty) return false
+
+        if (startServiceFirst) serviceLauncher.ensureStarted()
 
         if (!current.settings.mixWithOtherApps && !holdsFocus) {
             if (!focus.request()) return false // denied: stay paused, change nothing
             holdsFocus = true
         }
 
-        serviceLauncher.ensureStarted()
+        if (!startServiceFirst) serviceLauncher.ensureStarted()
         engine.setMix(current.mix)
         engine.setMasterVolume(current.masterVolume)
         engine.start()
+        // The engine is rendering: headphone unplugs must reach us even when the
+        // user asked to mix with other apps and we hold no focus (review #3).
+        focus.setNoisyMonitoring(true)
         // Held for as long as the engine renders (through any sleep-timer fade,
         // which stops the engine only when it completes) so the CPU keeps
         // feeding audio after the screen goes off. Released in pauseInternal.
@@ -245,6 +263,9 @@ class DefaultPlaybackController(
         }
         if (_state.value.isPlaying) {
             engine.stop()
+            // The engine is no longer rendering, so stop watching for unplugs
+            // regardless of whether we ever held focus (review #3).
+            focus.setNoisyMonitoring(false)
             wakeLock.release()
             _state.update { it.copy(isPlaying = false) }
         }
@@ -410,7 +431,12 @@ class DefaultPlaybackController(
                 }
                 // An expired timer means playback *should* already have stopped
                 // while we were dead: come back paused, not blaring at 4am.
-                if (persisted.wasPlaying && !persisted.mix.isEmpty && !timerExpired) startPlayback()
+                // The service goes up before the focus request, and one retry
+                // covers the case where the system had not finished promoting it
+                // yet (restore reads disk in parallel with onStartCommand).
+                if (persisted.wasPlaying && !persisted.mix.isEmpty && !timerExpired) {
+                    if (!startPlayback(startServiceFirst = true)) scheduleRestoreRetry()
+                }
                 if (hasTimer && !timerExpired) {
                     armTimer(
                         totalMillis = persisted.timerTotalMillis,
@@ -480,7 +506,28 @@ class DefaultPlaybackController(
         private set
 
     private fun dispatch(block: () -> Unit) {
+        // Any user command means the restore's auto-resume retry must stand down.
+        userCommandSinceRestore = true
         scope.launch(mainDispatcher) { runOrQueue(block) }
+    }
+
+    /**
+     * One more attempt at resuming a sticky restart, [RESTORE_FOCUS_RETRY_MILLIS]
+     * later. The only reason [startPlayback] fails on restore is a refused focus
+     * request, and the common cause is the foreground service not being up yet
+     * (restore reads disk in parallel with the service's onStartCommand). One
+     * retry is the whole policy: a second refusal means something else holds
+     * focus and is entitled to it, and retrying forever would eventually start
+     * sound at a moment the user never asked for. Anything the user did in the
+     * meantime wins outright, so a retry that finds [userCommandSinceRestore]
+     * set does nothing.
+     */
+    private fun scheduleRestoreRetry() {
+        scope.launch(mainDispatcher) {
+            delay(RESTORE_FOCUS_RETRY_MILLIS)
+            if (userCommandSinceRestore) return@launch
+            startPlayback(startServiceFirst = true)
+        }
     }
 
     /** Main-thread only: runs [block] now, or queues it until restore is done. */
@@ -490,6 +537,9 @@ class DefaultPlaybackController(
 
     private companion object {
         const val TICK_MILLIS = 1_000L
+
+        /** How long after a sticky restart to retry a focus-refused resume once. */
+        const val RESTORE_FOCUS_RETRY_MILLIS = 1_500L
         const val PERSIST_DEBOUNCE_MILLIS = 300L
         const val MILLIS_PER_SECOND = 1_000L
         const val MILLIS_PER_MINUTE = 60_000L
