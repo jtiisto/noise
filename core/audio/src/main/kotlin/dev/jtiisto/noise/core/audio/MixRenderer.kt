@@ -110,6 +110,20 @@ class MixRenderer @JvmOverloads constructor(
     private var sleepTarget = 1f
     private var sleepStep = 0f
 
+    // The sleep fade *down* as an exact integer sample countdown rather than a
+    // Float step (engine review #4, ported from Notch 2026-09-15). `sleepPhase /
+    // durationSamples` truncated at [MIN_STEP] and accumulated in single
+    // precision made a requested 120 s fade finish in 117 s at 48 kHz and in
+    // 49 s at 192 kHz — the sound cut out while the user was still awake.
+    // Counting samples makes the duration exact at every rate: sleepPhase is
+    // `sleepFrom * sleepRemaining / sleepTotal`, landing on exactly zero on the
+    // last sample. [sleepTotal] is 0 whenever no fade-down is counting; the
+    // climb back out of a cancelled fade still uses [sleepStep]/[sleepTarget].
+    private var sleepFrom = 1f
+    private var sleepTotal = 0
+    private var sleepRemaining = 0
+    private var sleepScale = 0.0
+
     private var appliedVersion = -1L
     private var appliedMix: Mix? = null
     private var armedFadeId = 0L
@@ -121,6 +135,15 @@ class MixRenderer @JvmOverloads constructor(
     private val fadeInSamples = msToSamples(config.fadeInMs.toFloat())
     private val fadeOutSamples = msToSamples(config.fadeOutMs.toFloat())
     private val crossfadeSamples = msToSamples(config.layerCrossfadeMs.toFloat())
+
+    init {
+        // Engine review #10 (ported from Notch): EqualPowerFade's 4097-entry
+        // table is built in its class initialiser; left alone that runs on the
+        // *audio* thread on the first render — allocating and computing 4097
+        // sines before the first sample. Touching it here builds it on whichever
+        // thread constructs the renderer, which is never the audio thread.
+        EqualPowerFade.value(0.5f)
+    }
 
     // ---- Public API ----------------------------------------------------------
 
@@ -212,7 +235,7 @@ class MixRenderer @JvmOverloads constructor(
                 val m = masterRamp.next()
                 val d = duckRamp.next()
                 startPhase = advance(startPhase, startTarget, startStep)
-                sleepPhase = advance(sleepPhase, sleepTarget, sleepStep)
+                sleepPhase = advanceSleep()
                 val e = m * d *
                     EqualPowerFade.value(startPhase) * EqualPowerFade.value(sleepPhase)
                 left[i] = SoftClipper.clip(left[i] * e)
@@ -262,14 +285,20 @@ class MixRenderer @JvmOverloads constructor(
                 pendingCompletion = null
                 sleepTarget = 1f
                 sleepStep = 1f / fadeInSamples
+                sleepTotal = 0
             }
         } else if (fade.id != armedFadeId) {
             armedFadeId = fade.id
             pendingCompletion = fade.onComplete
             sleepTarget = 0f
-            // Scale the step by the current phase so a re-armed fade still
-            // takes exactly the requested time from wherever it is now.
-            sleepStep = (sleepPhase / fade.durationSamples).coerceAtLeast(MIN_STEP)
+            // Counted in samples from wherever the envelope is now, so a
+            // re-armed fade still takes exactly the requested time — and a long
+            // fade at a high sample rate takes the time it was asked for
+            // (engine review #4).
+            sleepFrom = sleepPhase
+            sleepTotal = fade.durationSamples
+            sleepRemaining = fade.durationSamples
+            sleepScale = sleepFrom.toDouble() / fade.durationSamples
         }
 
         // Reference comparison, not equality: `copy()` preserves the mix
@@ -363,6 +392,22 @@ class MixRenderer @JvmOverloads constructor(
             }
             if (ramp.value == 0f && ramp.isAtTarget) slot.inUse = false
         }
+    }
+
+    /**
+     * One sample of the sleep envelope: an exact integer countdown while a
+     * fade-down is running (engine review #4), the ordinary Float ramp while
+     * climbing back out of a cancelled or completed one.
+     */
+    private fun advanceSleep(): Float {
+        if (sleepTotal <= 0) return advance(sleepPhase, sleepTarget, sleepStep)
+        if (sleepRemaining > 0) {
+            sleepRemaining--
+            // Exactly zero on the final sample, not "whatever the accumulated
+            // Float subtraction happened to land on".
+            sleepPhase = if (sleepRemaining == 0) 0f else (sleepScale * sleepRemaining).toFloat()
+        }
+        return sleepPhase
     }
 
     private fun updateCompletionState() {

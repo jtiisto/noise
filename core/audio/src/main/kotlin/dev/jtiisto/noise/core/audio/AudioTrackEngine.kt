@@ -53,6 +53,9 @@ class AudioTrackEngine(
 
     private val renderer = MixRenderer(effectiveConfig)
 
+    /** Size of the AudioTrack buffer; also how much silence a clean teardown drains. */
+    private val bufferBytes: Int = computeBufferBytes()
+
     override val isRunning: Boolean get() = running.get()
 
     override fun start() {
@@ -125,22 +128,53 @@ class AudioTrackEngine(
                         interleaved[j++] = left[i]
                         interleaved[j++] = right[i]
                     }
-                    val written = current.write(interleaved, 0, interleaved.size, AudioTrack.WRITE_BLOCKING)
-                    if (written < 0) {
-                        if (written == AudioTrack.ERROR_DEAD_OBJECT && !recreated) {
-                            // The audio server restarted (or the device changed).
-                            // One rebuild is worth attempting; a second failure
-                            // means something is genuinely wrong and looping would
-                            // just burn battery.
-                            Log.w(TAG, "AudioTrack died, recreating once")
-                            recreated = true
-                            releaseTrack(current)
-                            current = createTrack().also { it.play() }
-                            track = current
-                        } else {
+                    // `write` may take fewer floats than it was offered, even in
+                    // WRITE_BLOCKING mode. Anything it left behind would be
+                    // overwritten by the next render — a gap punched into the
+                    // middle of a fade (engine review #9, ported from Notch) — so
+                    // keep offering the rest of the block until it is all gone.
+                    var offset = 0
+                    var stalled = 0
+                    while (offset < interleaved.size) {
+                        val written = current.write(
+                            interleaved,
+                            offset,
+                            interleaved.size - offset,
+                            AudioTrack.WRITE_BLOCKING,
+                        )
+                        if (written == 0) {
+                            // A blocking write returns everything or an error, so
+                            // this should not happen; if a stopped track ever
+                            // produces it, give up on the block rather than
+                            // spinning a core all night.
+                            if (++stalled >= MAX_STALLED_WRITES) {
+                                Log.w(TAG, "AudioTrack accepted nothing; dropping a block")
+                                break
+                            }
+                            continue
+                        }
+                        stalled = 0
+                        if (written < 0) {
+                            if (written == AudioTrack.ERROR_DEAD_OBJECT && !recreated) {
+                                // The audio server restarted (or the device changed).
+                                // One rebuild is worth attempting; a second failure
+                                // means something is genuinely wrong and looping would
+                                // just burn battery.
+                                Log.w(TAG, "AudioTrack died, recreating once")
+                                recreated = true
+                                releaseTrack(current)
+                                current = createTrack().also { it.play() }
+                                track = current
+                                // The new track's buffer is empty, so the block
+                                // goes in again from the start rather than being
+                                // abandoned half-written.
+                                offset = 0
+                                continue
+                            }
                             Log.e(TAG, "AudioTrack write failed: $written")
                             return
                         }
+                        offset += written
                     }
                     val underruns = current.underrunCount
                     if (underruns != lastUnderruns) {
@@ -148,6 +182,14 @@ class AudioTrackEngine(
                         lastUnderruns = underruns
                     }
                 }
+                // The renderer has faded to silence, but a blocking write only
+                // promises the samples were *queued*: the tail of the fade is
+                // still ahead of the playback head, and the pause()/flush() in
+                // releaseTrack would throw it away (engine review #8, ported from
+                // Notch). Push one buffer of silence through first — the write
+                // cannot return until the audio in front of it has been played,
+                // which is the drain.
+                drainQueuedAudio(current, interleaved)
                 // The exit decision is taken under the same lock start() uses:
                 // a start() that lands while the fade was finishing has cleared
                 // shouldStop and re-armed the renderer, so we keep this thread
@@ -189,15 +231,38 @@ class AudioTrackEngine(
         }
     }
 
-    private fun createTrack(): AudioTrack {
+    /**
+     * Writes one buffer's worth of silence, which returns only once everything
+     * queued ahead of it has actually been played (engine review #8). Aborts the
+     * moment a [start] clears `shouldStop`: the caller then goes back to
+     * rendering instead of spending the rest of the buffer on silence.
+     */
+    private fun drainQueuedAudio(track: AudioTrack, scratch: FloatArray) {
+        var remaining = bufferBytes / BYTES_PER_FLOAT
+        scratch.fill(0f)
+        while (remaining > 0 && shouldStop.get()) {
+            val written = track.write(
+                scratch,
+                0,
+                minOf(remaining, scratch.size),
+                AudioTrack.WRITE_BLOCKING,
+            )
+            if (written <= 0) return // dead or refused: nothing left to drain through
+            remaining -= written
+        }
+    }
+
+    private fun computeBufferBytes(): Int {
         val minBytes = AudioTrack.getMinBufferSize(
             effectiveConfig.sampleRate,
             AudioFormat.CHANNEL_OUT_STEREO,
             AudioFormat.ENCODING_PCM_FLOAT,
         )
         val blockBytes = effectiveConfig.blockFrames * CHANNELS * BYTES_PER_FLOAT
-        val bufferBytes = maxOf(minBytes * BUFFER_MULTIPLIER, blockBytes * 2)
+        return maxOf(minBytes * BUFFER_MULTIPLIER, blockBytes * 2)
+    }
 
+    private fun createTrack(): AudioTrack {
         return AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -234,6 +299,9 @@ class AudioTrackEngine(
         const val CHANNELS = 2
         const val BYTES_PER_FLOAT = 4
         const val BUFFER_MULTIPLIER = 4
+
+        /** Consecutive zero-progress writes tolerated before a block is abandoned. */
+        const val MAX_STALLED_WRITES = 3
 
         /**
          * Prefers the hardware's own output rate so the framework never has to

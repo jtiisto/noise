@@ -16,12 +16,31 @@ ported here, each with the regression test Notch added.
 | E2 | High | `AudioTrackEngine` released the lock between the render thread's exit decision and clearing `running`/`thread`, so a `start()` in that window saw "running", returned, and then the thread died — playback requested, nothing playing. | **Fixed** — `thread`/`running` are cleared inside the same `synchronized` block as the exit decision; the `finally` block remains for the error path. Device glue, no JVM test (as in Notch). |
 | E3 | Medium | A `stop()` before the first render never set `isFinished` (a `startedOnce` guard), so the sink looped writing silence forever. | **Fixed** — the `startedOnce` guard is removed; the engine reports finished whenever stopped with the start envelope at zero. `MixRendererTest.stopBeforeTheFirstRenderFinishes`. |
 
-Not ported: the same Notch review's other **(Hush too)** findings — E8 (teardown
-discards the fade tail), E9 (partial `AudioTrack.write` / dead-object rebuild
-drop samples), E10 (fade/sine tables built lazily on the audio thread), and the
-playback findings P3/P4/P5/P7 — plus E4 (a Float-stepped sleep fade finishes
-early at high sample rates), which Hush also has. Left for a follow-up; noted so
-they are not forgotten.
+## 2026-09-15 — Ported the remaining (Hush too) engine findings (E4, E8, E9, E10)
+
+The follow-up pass on the rest of the Notch engine review. All in the shared
+audio engine.
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| E4 | Medium | The sleep fade stepped a Float phase per sample (`phase / durationSamples` floored at `MIN_STEP`); a requested 120 s fade finished in 117 s at 48 kHz and 49 s at 192 kHz — silence while the user was still awake. | **Fixed** — `MixRenderer` counts the fade-down in samples (`sleepFrom * sleepRemaining / sleepTotal`, exactly zero on the last sample); the climb back out of a cancelled fade still uses the Float ramp. `SleepFadeDurationTest` at 44.1/48/96/192 kHz and a re-armed fade. |
+| E8 | Medium | Teardown called `pause()/flush()` right after the renderer reached zero, discarding the queued tail of the fade. | **Fixed** — one buffer of blocking silence is drained through first (`drainQueuedAudio`), abandoned the moment a `start()` lands. Device glue, no JVM test. |
+| E9 | Medium | A partial `AudioTrack.write` and the dead-object rebuild dropped rendered samples, punching a gap into a fade. | **Fixed** — an offset loop writes the whole block; a rebuild re-sends it from the start; a bound on zero-progress writes. Device glue, no JVM test. |
+| E10 | Low | `EqualPowerFade`'s 4097-entry table was built lazily in its class initialiser, i.e. on the audio thread at the first render. | **Fixed** — touched in `MixRenderer`'s constructor. (Hush has no `FastSine`.) |
+
+**P4 (SessionGuard) intentionally not ported.** Notch's P4 fenced the engine's
+trailing `stop()` to the session that armed the fade, for a fade completing
+after the controller had started *matching* — a flow Hush does not have. In
+Hush the trailing `stop()` is the `beginFadeOut { onComplete(); stop() }`
+callback, which only fires on a genuine completion: E1 makes `start()` clear the
+fade request (dropping the completion), E2 fences the thread teardown, and the
+controller already ignores a completion whose fade generation no longer matches
+(2026-09-12 review #3). So the P4 scenario is already covered; the SessionGuard
+machinery would add complexity without a reachable Hush bug.
+
+Still pending: the playback findings **P3** (BECOMING_NOISY receiver registered
+only while holding focus), **P5** (restore requests focus before the foreground
+service exists), and **P7 first half** (`COMMAND_RELEASE` not advertised).
 
 ## 2026-09-12 — Codex review #1 (first integrated build, commit 96ebc6c)
 
