@@ -3,6 +3,26 @@
 Codex full-repo reviews and how each finding was resolved. Accepted findings
 (not fixed) stay listed with the reason.
 
+## 2026-09-15 — Ported Notch engine fixes (E1–E3, shared code)
+
+Notch (`~/dev/native/notch`) was bootstrapped from Hush, so its Codex engine
+review (2026-09-15, Notch `docs/reviews.md`) found bugs in code Hush shares.
+The three the review marked **(Hush too)** and scoped to the engine core are
+ported here, each with the regression test Notch added.
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| E1 | High | A completed sleep fade left `armedFadeId`, the snapshot's fade request and `sleepPhase = 0` in place, so every later `start()` (which only flipped `playing`) rendered silence until the process restarted — "sleep timer ends → press play again → silence". | **Fixed** — `MixRenderer.start()` also clears `fadeOut`; the existing cancel branch then ramps the sleep envelope back to full, and a late `cancelFadeOut` after completion fires nothing. `MixRendererTest.startAfterACompletedSleepFade` and `cancelAfterCompletionIsInert`. |
+| E2 | High | `AudioTrackEngine` released the lock between the render thread's exit decision and clearing `running`/`thread`, so a `start()` in that window saw "running", returned, and then the thread died — playback requested, nothing playing. | **Fixed** — `thread`/`running` are cleared inside the same `synchronized` block as the exit decision; the `finally` block remains for the error path. Device glue, no JVM test (as in Notch). |
+| E3 | Medium | A `stop()` before the first render never set `isFinished` (a `startedOnce` guard), so the sink looped writing silence forever. | **Fixed** — the `startedOnce` guard is removed; the engine reports finished whenever stopped with the start envelope at zero. `MixRendererTest.stopBeforeTheFirstRenderFinishes`. |
+
+Not ported: the same Notch review's other **(Hush too)** findings — E8 (teardown
+discards the fade tail), E9 (partial `AudioTrack.write` / dead-object rebuild
+drop samples), E10 (fade/sine tables built lazily on the audio thread), and the
+playback findings P3/P4/P5/P7 — plus E4 (a Float-stepped sleep fade finishes
+early at high sample rates), which Hush also has. Left for a follow-up; noted so
+they are not forgotten.
+
 ## 2026-09-12 — Codex review #1 (first integrated build, commit 96ebc6c)
 
 Read-only review of every Kotlin source, the Gradle files and the manifests

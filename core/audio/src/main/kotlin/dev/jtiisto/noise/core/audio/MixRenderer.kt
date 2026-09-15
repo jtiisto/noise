@@ -114,7 +114,6 @@ class MixRenderer @JvmOverloads constructor(
     private var appliedMix: Mix? = null
     private var armedFadeId = 0L
     private var pendingCompletion: (() -> Unit)? = null
-    private var startedOnce = false
     private var playing = false
 
     private val masterRampSamples = msToSamples(MASTER_RAMP_MS)
@@ -125,8 +124,19 @@ class MixRenderer @JvmOverloads constructor(
 
     // ---- Public API ----------------------------------------------------------
 
-    /** Idempotent: fades in from wherever the envelope currently is. */
-    fun start() = publish { it.copy(playing = true) }
+    /**
+     * Idempotent: fades in from wherever the envelope currently is.
+     *
+     * A start also drops any sleep fade the snapshot still carries. Engine
+     * review #1 (ported from Notch, 2026-09-15): once a sleep fade had
+     * completed, its request stayed in the snapshot with the envelope pinned at
+     * zero, so every later `start()` — which only flipped `playing` — rendered
+     * silence for the life of the process. Clearing `fadeOut` makes the running
+     * fade-handling climb the sleep envelope back to full; a controller that
+     * resumes inside a fade window re-issues [beginFadeOut] right afterwards, so
+     * an intended fade survives.
+     */
+    fun start() = publish { it.copy(playing = true, fadeOut = null) }
 
     /** Idempotent: fades out; [isFinished] flips once the envelope reaches zero. */
     fun stop() = publish { it.copy(playing = false) }
@@ -232,7 +242,6 @@ class MixRenderer @JvmOverloads constructor(
 
         playing = snapshot.playing
         if (snapshot.playing) {
-            startedOnce = true
             startTarget = 1f
             startStep = 1f / fadeInSamples
         } else {
@@ -243,8 +252,12 @@ class MixRenderer @JvmOverloads constructor(
         val fade = snapshot.fadeOut
         if (fade == null) {
             if (armedFadeId != 0L) {
-                // Cancelled before completion: climb back to full over the
-                // normal fade-in time and drop the callback on the floor.
+                // The fade request is gone while a fade was armed *or had
+                // already completed* — a cancel, or the fresh session a start()
+                // now publishes (engine review #1). Either way: climb the sleep
+                // envelope back to full over the normal fade-in time and drop
+                // any callback. A completion has already nulled pendingCompletion,
+                // so a late cancel still cannot re-fire it.
                 armedFadeId = 0L
                 pendingCompletion = null
                 sleepTarget = 1f
@@ -363,7 +376,12 @@ class MixRenderer @JvmOverloads constructor(
             callback?.invoke()
             return
         }
-        if (startedOnce && !playing && startPhase == 0f) isFinished = true
+        // No "has rendered at least once" guard (engine review #3, ported from
+        // Notch): a start() coalesced with an immediate stop() before the first
+        // block would otherwise never report finished, leaving the sink writing
+        // silence forever. The sink only reads this after it has asked to stop,
+        // so reporting finished while idle costs nothing.
+        if (!playing && startPhase == 0f) isFinished = true
         if (playing && startPhase > 0f) isFinished = false
     }
 

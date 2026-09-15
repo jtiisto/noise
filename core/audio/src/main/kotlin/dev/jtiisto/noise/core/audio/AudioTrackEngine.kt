@@ -153,8 +153,19 @@ class AudioTrackEngine(
                 // shouldStop and re-armed the renderer, so we keep this thread
                 // and this track instead of tearing down and leaving the engine
                 // silent with running == true.
+                //
+                // Invariant (engine review #2, ported from Notch 2026-09-15):
+                // "this thread is about to die" and "running == false" must
+                // become visible together, under this lock. Clearing them in
+                // the finally block instead left a window where start() saw
+                // running == true, returned happily, and then watched the only
+                // render thread exit — playback requested, nothing playing.
                 synchronized(lock) {
-                    if (shouldStop.get()) return
+                    if (shouldStop.get()) {
+                        thread = null
+                        running.set(false)
+                        return
+                    }
                 }
             }
         } catch (e: RuntimeException) {
@@ -162,10 +173,12 @@ class AudioTrackEngine(
             // process down in the middle of the night; log and go quiet instead.
             Log.e(TAG, "audio thread stopped", e)
         } finally {
-            // Clear the running state FIRST, under the lock: releaseTrack()
-            // spends real time in JNI, and a start() landing in that window
-            // must see "not running" and spawn a new thread rather than
-            // no-op against one that is already committed to exiting.
+            // The normal exit above already cleared these under the lock; this
+            // is the error path (a write failure or an escaped exception), where
+            // the same invariant still has to hold. Clear the running state
+            // FIRST, under the lock: releaseTrack() spends real time in JNI, and
+            // a start() landing in that window must see "not running" and spawn a
+            // new thread rather than no-op against one already committed to exiting.
             synchronized(lock) {
                 if (thread === Thread.currentThread()) {
                     thread = null

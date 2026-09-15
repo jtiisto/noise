@@ -207,6 +207,26 @@ class MixRendererTest {
         assertTrue(renderer.isFinished)
     }
 
+    @Test
+    @DisplayName("a stop that lands before the first render still reports finished")
+    fun stopBeforeTheFirstRenderFinishes() {
+        val renderer = renderer(ConstantFactory(0.5f))
+        renderer.setMix(Mix.of(SoundId.WHITE to 1f))
+        // Both commands land inside one block, so the renderer only ever sees
+        // the stop. Requiring a previously rendered start left isFinished false
+        // forever and the sink wrote silence for the rest of the process's life
+        // (engine review #3, ported from Notch 2026-09-15).
+        renderer.start()
+        renderer.stop()
+
+        val block = FloatArray(BLOCK)
+        val blockRight = FloatArray(BLOCK)
+        renderer.render(block, blockRight, BLOCK)
+
+        assertTrue(renderer.isFinished, "a coalesced start+stop never finished")
+        assertEquals(0f, SignalAnalysis.peak(block))
+    }
+
     // ---- Duck -----------------------------------------------------------------
 
     @Test
@@ -293,6 +313,58 @@ class MixRendererTest {
 
         assertEquals(0, first.get(), "the replaced callback must not fire")
         assertEquals(1, second.get(), "the new callback must fire once")
+    }
+
+    @Test
+    @DisplayName("a completed sleep fade does not mute the next start")
+    fun startAfterACompletedSleepFade() {
+        val renderer = renderer(ConstantFactory(0.5f))
+        renderer.setMix(Mix.of(SoundId.WHITE to 1f))
+        renderer.start()
+        settle(renderer)
+
+        val calls = AtomicInteger()
+        renderer.beginFadeOut(500) { calls.incrementAndGet() }
+        assertEquals(0f, RenderHarness.renderMix(renderer, 1.0, SAMPLE_RATE).left.last(), 1e-6f)
+        assertEquals(1, calls.get())
+
+        // What the engine does the moment the fade completes, then what the user
+        // does next morning. The completed request used to stay in the snapshot
+        // with the envelope pinned at zero, so every later start rendered silence
+        // for the life of the process (engine review #1, ported from Notch).
+        renderer.stop()
+        RenderHarness.advance(renderer, 1.0, SAMPLE_RATE)
+        renderer.start()
+
+        val restarted = RenderHarness.renderMix(renderer, 2.0, SAMPLE_RATE)
+        assertEquals(
+            SoftClipper.clip(0.5f).toDouble(),
+            restarted.left.last().toDouble(),
+            1e-3,
+            "the sound never came back after a completed sleep fade",
+        )
+        assertTrue(SignalAnalysis.maxAbsDelta(restarted.left) <= 0.05, "the restart stepped")
+        assertEquals(1, calls.get(), "the completed fade called back again")
+    }
+
+    @Test
+    @DisplayName("cancelling after the fade completed calls nothing back")
+    fun cancelAfterCompletionIsInert() {
+        val renderer = renderer(ConstantFactory(0.5f))
+        renderer.setMix(Mix.of(SoundId.WHITE to 1f))
+        renderer.start()
+        settle(renderer)
+
+        val calls = AtomicInteger()
+        renderer.beginFadeOut(500) { calls.incrementAndGet() }
+        RenderHarness.renderMix(renderer, 1.0, SAMPLE_RATE)
+        assertEquals(1, calls.get())
+
+        // A cancel that loses the race with the completion must stay harmless:
+        // the callback has already fired and must never fire twice.
+        renderer.cancelFadeOut()
+        RenderHarness.renderMix(renderer, 3.0, SAMPLE_RATE)
+        assertEquals(1, calls.get(), "a late cancel re-opened the completed fade")
     }
 
     // ---- Clipper --------------------------------------------------------------
