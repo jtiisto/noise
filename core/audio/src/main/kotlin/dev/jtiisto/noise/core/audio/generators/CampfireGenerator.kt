@@ -39,8 +39,8 @@ data class CampfirePreset(
      * flurry follow-ons included — so the Poisson trigger clock runs slower by
      * the mean flurry size (see [flurryProbability]).
      */
-    val cracklesPerSecondMin: Float = 8f,
-    val cracklesPerSecondMax: Float = 18f,
+    val cracklesPerSecondMin: Float = 5f,
+    val cracklesPerSecondMax: Float = 12f,
 
     // --- Flurry / clustering -------------------------------------------------
     /**
@@ -108,7 +108,7 @@ data class CampfirePreset(
 
     val snapVoices: Int = 24,
     val popVoices: Int = 8,
-    val outputGain: Float = 0.85f,
+    val outputGain: Float = 0.98f,
 ) {
     companion object {
         val DEFAULT = CampfirePreset()

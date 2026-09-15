@@ -12,8 +12,9 @@ import dev.jtiisto.noise.core.audio.dsp.SmoothNoise
 
 /**
  * Tuning knobs for [RainGenerator]. The catalog's Rain and Downpour are two
- * presets of the same synth, and the thunderstorm reuses the downpour preset
- * at a slightly lower level to leave headroom for the rolls.
+ * presets of the same synth ([LIGHT] and [DOWNPOUR]), and the thunderstorm has
+ * its own darker, heavier [STORM] bed (trimmed slightly to leave headroom for
+ * the rolls) so it does not sound like the Downpour catalog entry.
  *
  * @param dropsPerSecond mean Poisson rate of individual audible drops.
  * @param bedLowHz / [bedHighHz] band-pass corners of the continuous sheet.
@@ -94,6 +95,33 @@ data class RainPreset(
             closeDropLevel = 1.7f,
             gustDepth = 0.28f,
             outputGain = 0.1278f,
+        )
+
+        /**
+         * Storm: the thunderstorm's own rain bed, deliberately unlike Downpour.
+         * Downpour is a bright sheet with audible drops; a storm is a darker,
+         * heavier *wall* of rain — a denser drop stream that reads as texture
+         * rather than ticks, a sheet rolled off well before Downpour's sparkle,
+         * darker drop colour, and roughly twice the low-frequency body so it
+         * sits lower and feels enveloping under the thunder. Sharing Downpour's
+         * exact bed is what made the two catalog sounds hard to tell apart.
+         */
+        val STORM = RainPreset(
+            dropsPerSecond = 280f,
+            bedLowHz = 500f,
+            bedHighHz = 4_500f,
+            bedLevel = 1.5f,
+            dropLevel = 0.42f,
+            dropMinMs = 2f,
+            dropMaxMs = 10f,
+            dropMinCutoffHz = 1_600f,
+            dropMaxCutoffHz = 7_000f,
+            bodyLevel = 0.42f,
+            closeDropsPerSecond = 8f,
+            closeDropLevel = 1.4f,
+            closeDropMaxHz = 3_200f,
+            gustDepth = 0.38f,
+            outputGain = 0.1450f,
         )
     }
 }

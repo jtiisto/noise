@@ -122,24 +122,28 @@ Nature:
   ~20 dB hole between 250 Hz and 1 kHz with those values, which reads as
   hollow. The body is high-passed at 45 Hz because content below that is
   inaudible on a phone speaker and only costs headroom.
-- **Thunderstorm** — Downpour bed (trimmed to 0.9) + thunder events every
-  25–90 s (uniform random), with the *first* event deliberately 5–15 s after
-  start so the sound identifies itself and the 20 s offline render contains a
-  roll: a 4–9 s brown-noise burst through LP 40–220 Hz with a sharp attack
-  (30–150 ms), and 1–3 sub-rolls: 2–4 overlapping difference-of-exponentials
-  bumps spread over the first 60 % of the event, each decaying to −40 dB over
-  70 % of the event length, summed and clamped. The long per-bump decay is
-  what makes it *roll* — a shorter one is over in a couple of seconds and
-  reads as a thump. The low-pass also sweeps *down* across the event, ending
-  at 45 % of its starting cutoff, because thunder darkens as it decays (later
-  arrivals have travelled further and air absorption is
-  frequency-dependent). Peak limited so a roll never exceeds the rain bed by
-  more than +6 dB (sleep app — no jump scares); the test enforces ≤ 6.5 dB on
-  a 250 ms window. Optional "crack" transient only on 1 in 4 rolls, 9 dB under
-  the roll's own peak.
-  A roll renders for 1.6× its nominal duration (`TAIL_FACTOR`) with the
-  swept-down cutoff held, so the last sub-roll decays fully instead of being
-  cut mid-tail (a click); the inter-roll gap counts from the extended end.
+- **Thunderstorm** — its own darker, heavier `STORM` rain bed (trimmed to 0.9),
+  *not* the Downpour preset, + prominent thunder events every 15–45 s (first at
+  5–15 s so the sound identifies itself), ~1–3/min. A roll is three layers under
+  one 2–4-bump difference-of-exponentials envelope (over the first 60 % of a
+  5–11 s event, so it *rolls* rather than thumps): (1) a **deep rumble** — brown
+  noise through LP 60–400 Hz sweeping *down* to 45 % (darkens as it decays), at
+  `peakAmplitude` 0.38, which leads on real low-end speakers (~+16 dB over the
+  bed in the sub-250 Hz band); (2) a **low-mid onset body** — a ~720 Hz noise
+  band mixed in but *faded out over the roll*, so a phone speaker (which cannot
+  reproduce the deep rumble at all) gets a cue in the 400 Hz–1.3 kHz range at the
+  strike, while the tail stays a pure darkening rumble; (3) an onset **crack** on
+  ~70 % of rolls (1.2–2.6 kHz). The rain bed **ducks 25 %** under the roll so the
+  thunder sits forward. Because a prominent roll + bed + crack can sum past 1.5,
+  the generator carries **its own soft limiter** (tanh, knee 0.62, ceiling 0.88):
+  a no-op below the knee (bed and ordinary rolls), so it only shaves the rare
+  peak, keeps the output ≤ 0.9, and never lets the downstream clipper distort a
+  roll. This is an event-driven sound, so it is calibrated on the **between-rolls
+  bed** (median of the RMS envelope) to −20 dBFS, with rolls as events above it,
+  not on the roll-inflated mean; the test asserts a roll is clearly audible
+  (≥ 8 dB over the bed) and never clips (peak ≤ 0.9). A roll renders for 1.6× its
+  nominal duration (`TAIL_FACTOR`) so the last sub-roll decays fully instead of
+  being cut mid-tail (a click); the inter-roll gap counts from the extended end.
 - **Ocean** — swell envelope: raised-cosine, period 9–15 s randomized per
   wave, asymmetric (2/5 attack, 3/5 decay), with a 0.07 floor so the sea never
   goes silent; layers: brown (HP 40 Hz) + 40 % pink body following the

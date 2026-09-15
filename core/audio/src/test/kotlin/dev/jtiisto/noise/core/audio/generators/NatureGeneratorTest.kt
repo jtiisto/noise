@@ -115,26 +115,32 @@ class NatureGeneratorTest {
     }
 
     @Test
-    @DisplayName("thunder rolls are rare and never more than 6 dB above the rain bed")
-    fun thunderIsRareAndSoft() {
+    @DisplayName("thunder rolls are clearly audible over the rain but never clip")
+    fun thunderRollsAreAudibleButBounded() {
         val generator = ThunderstormGenerator(RenderHarness.SAMPLE_RATE, SEED)
         val capture = RenderHarness.renderGenerator(generator, seconds = 180.0)
         val seconds = 180.0
         val rollsPerMinute = generator.rollCount / (seconds / 60.0)
         println("thunder rolls: ${generator.rollCount} in ${seconds}s (%.2f/min)".format(rollsPerMinute))
-        // 25-90 s intervals means 0.7-2.4 per minute.
-        assertTrue(rollsPerMinute in 0.5..2.6, "$rollsPerMinute rolls/minute is outside the design range")
+        // 15-45 s gaps plus a 5-11 s roll means roughly 1.1-3.2 per minute.
+        assertTrue(rollsPerMinute in 1.0..3.6, "$rollsPerMinute rolls/minute is outside the design range")
 
         val envelope = SignalAnalysis.rmsEnvelope(capture.left, capture.sampleRate / 4)
         val sorted = envelope.sorted()
         val median = sorted[sorted.size / 2]
         val loudest = sorted.last()
         val headroomDb = 20.0 * kotlin.math.log10(loudest / median)
-        println("thunder peak is %.1f dB over the median bed".format(headroomDb))
-        // The spec caps a roll at +6 dB over the bed; 6.5 leaves room for the
-        // measurement window without letting a real regression through.
-        assertTrue(headroomDb <= 6.5, "a roll reached ${"%.1f".format(headroomDb)} dB over the bed")
-        assertTrue(headroomDb >= 2.0, "rolls are inaudible: only ${"%.1f".format(headroomDb)} dB over the bed")
+        println("thunder rolls %.1f dB over the median bed".format(headroomDb))
+        // The rolls are a deliberate, prominent event — the listener must
+        // actually hear thunder rolling, not a subtle swell — so they must
+        // clearly rise above the rain bed. (This replaces the earlier "never
+        // more than 6 dB" cap, which made thunder near-inaudible.)
+        assertTrue(headroomDb >= 8.0, "thunder is too quiet: only ${"%.1f".format(headroomDb)} dB over the bed")
+        // But the generator's own soft limiter keeps the absolute peak under
+        // the 0.9 mix-headroom ceiling, so a roll never clips the mix. The
+        // exact per-channel peak is pinned by GeneratorCalibrationTest.
+        val peak = maxOf(SignalAnalysis.peak(capture.left), SignalAnalysis.peak(capture.right))
+        assertTrue(peak <= 0.9f, "a roll peaked at ${"%.3f".format(peak)}, past the 0.9 ceiling")
     }
 
     @Test
@@ -421,6 +427,25 @@ class NatureGeneratorTest {
         assertTrue(
             abs(flat) < 2.5,
             "with the sweep disabled the balance still moved $flat dB - something else is tilting it",
+        )
+    }
+
+    @Test
+    @DisplayName("thunderstorm reset reproduces the rumble after a roll has drawn brown noise")
+    fun thunderstormResetReproducesAfterRoll() {
+        // Force a roll almost immediately so the brown-noise rumble is actually
+        // drawn before the reset. The generic determinism check renders only 1 s,
+        // before the 5-15 s first-roll window, so it never touches the brown
+        // source and would miss a reseed regression here (found by Codex).
+        val preset = ThunderPreset.DEFAULT.copy(firstMinSeconds = 0.2f, firstMaxSeconds = 0.2f)
+        val generator = ThunderstormGenerator(RenderHarness.SAMPLE_RATE, SEED, preset)
+        generator.reset(4242L)
+        val first = RenderHarness.renderGenerator(generator, seconds = 4.0)
+        generator.reset(4242L)
+        val second = RenderHarness.renderGenerator(generator, seconds = 4.0)
+        assertTrue(
+            first.left.contentEquals(second.left) && first.right.contentEquals(second.right),
+            "thunderstorm reset(seed) is not reproducible once a roll has drawn brown noise",
         )
     }
 

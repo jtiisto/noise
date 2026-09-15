@@ -37,8 +37,8 @@ class GeneratorCalibrationTest {
                 seconds = window,
                 warmUpSeconds = WARM_UP_SECONDS,
             )
-            val leftDb = SignalAnalysis.rmsDb(capture.left)
-            val rightDb = SignalAnalysis.rmsDb(capture.right)
+            val leftDb = calibrationDb(id, capture.left, capture.sampleRate)
+            val rightDb = calibrationDb(id, capture.right, capture.sampleRate)
             val peak = maxOf(SignalAnalysis.peak(capture.left), SignalAnalysis.peak(capture.right))
             val correlation = SignalAnalysis.correlation(capture.left, capture.right)
             println(
@@ -116,6 +116,24 @@ class GeneratorCalibrationTest {
 
     private companion object {
         const val WARM_UP_SECONDS = 2.0
+
+        /**
+         * The level a sound is calibrated at. For most sounds this is the plain
+         * RMS. THUNDERSTORM is event-driven: its prominent thunder rolls (a
+         * deliberate design choice — the user must actually hear thunder) make
+         * the 40 s mean run ~2 dB hot, so calibrating the mean would force the
+         * rolls to be inaudibly quiet. Instead the *between-rolls bed* — the
+         * median of the RMS envelope, which the rolls (well under half the
+         * clip) cannot move — is calibrated to the target, so the rain matches
+         * the other sounds and the rolls sit above it as events. The peak stays
+         * under full scale via the generator's own limiter, checked separately.
+         */
+        fun calibrationDb(id: SoundId, samples: FloatArray, sampleRate: Int): Double {
+            if (id != SoundId.THUNDERSTORM) return SignalAnalysis.rmsDb(samples)
+            val envelope = SignalAnalysis.rmsEnvelope(samples, sampleRate / 4).sorted()
+            val median = envelope[envelope.size / 2]
+            return 20.0 * kotlin.math.log10(median.toDouble() + 1e-12)
+        }
 
         /**
          * Long windows for the sounds whose level is driven by rare events:

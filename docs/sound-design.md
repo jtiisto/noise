@@ -134,43 +134,61 @@ about 15 dB, which matches real rain's gentle 2-6 kHz emphasis.
 
 ## Thunderstorm
 
-The downpour bed at 0.90 level plus rare rolls. A roll is modelled on how
-thunder actually reaches a listener kilometres away: the discharge is
-broadband, but air absorption and ground reflection strip everything above a
-couple of hundred hertz, and the sound arrives smeared over seconds because
-different parts of the channel are different distances away.
+Its own **storm bed** (`RainPreset.STORM`, not the Downpour preset) plus
+prominent rolling thunder. The bed is deliberately unlike Downpour — a darker,
+heavier wall of rain (denser drop stream reading as texture not ticks, sheet
+rolled off ~4.5 kHz, ~2x the low-frequency body) — so switching between the two
+catalog sounds is a real change, not the same rain twice. Sharing Downpour's
+exact bed was the original mistake.
 
-* Source: brown noise (already -6 dB/oct) through a second-order low-pass drawn
-  per event between 40 and 220 Hz — near rolls are brighter.
-* Envelope: 2-4 overlapping difference-of-exponentials bumps spread over the
-  first 60 % of a 4-9 s event, each decaying to -40 dB over 70 % of the event
-  length, summed and clamped to 1. The overlap is what gives a roll its
-  re-swelling rather than a single decaying thud, and the long per-bump decay
-  is what makes it *roll*: at the 32 % this started with, the whole thing was
-  over in two and a half seconds, which reads as a thump.
-* The low-pass sweeps *down* across the event, ending at 45 % of where it
-  started. Thunder darkens as it decays, because the later arrivals have
-  travelled further through air and off more surfaces and air absorption is
-  strongly frequency-dependent. A roll whose timbre is constant reads as a
-  filtered noise burst rather than as distance.
-* One roll in four gets a short band-passed "crack" at onset (1.2-2.2 kHz,
-  9 dB under the roll's own peak): the direct path arriving before the smeared
-  reflections. It is deliberately quiet.
-* Left and right take independent brown streams under a shared envelope: one
+A roll is modelled on how thunder reaches a listener kilometres away: broadband
+at the source, but air absorption and ground reflection strip the top and smear
+the arrival over seconds. But the earlier design put the whole roll below
+~300 Hz and kept it gentle (+6 dB over the bed), which failed twice: it was
+near-inaudible, and what little there was is *sub-350 Hz*, which a phone speaker
+cannot reproduce at all — so on the target device thunder was silent. The rework
+makes the roll a prominent, layered event:
+
+* **Deep rumble (the body, leads on real speakers).** Brown noise (−6 dB/oct)
+  through a 2nd-order low-pass drawn 60-400 Hz per event, sweeping *down* to 45 %
+  of that across the roll (thunder darkens as it decays). At full level
+  (`peakAmplitude` 0.38) this lifts the sub-250 Hz band ~16 dB over the bed — a
+  clear deep rumble on headphones and speakers with real low end.
+* **Low-mid onset body (for the phone).** A ~720 Hz band of noise mixed in, but
+  *faded out over the roll* so it is strongest at the strike and gone by the
+  tail. It puts a cue in the 400 Hz-1.3 kHz range a phone *can* play, and
+  because it fades it does not keep high content in the tail that would flatten
+  the darkening — the roll still ends as a pure deep rumble. Keeping it a
+  supporting layer (well under the deep rumble's level) is what stops the roll
+  reading as "the rain changing" rather than as thunder.
+* **Onset crack.** Most rolls (0.7) open with a short 1.2-2.6 kHz snap — the
+  direct path before the smeared reflections — a soft leading edge, well below a
+  startling clap.
+* **Envelope:** 2-4 overlapping difference-of-exponentials bumps over the first
+  60 % of a 5-11 s event, summed and clamped, which is what makes it *roll*.
+* **Bed ducking.** The rain ducks lightly (25 %) under the roll envelope so the
+  thunder sits forward without the rain vanishing.
+* Left/right take independent brown and mid streams under a shared envelope: one
   event, two ears, decorrelated by the air path.
 
-Rolls arrive every 25-90 s, but the *first* one lands 5-15 s after start so a
-listener who taps "Thunderstorm" hears thunder rather than wondering whether
-they picked the wrong sound (and so the 20 s offline render contains one).
-Peak amplitude is capped at roughly 2x the bed's RMS — the spec's +6 dB
-ceiling, which the test suite now enforces at 6.5 dB rather than the 8 dB it
-originally allowed. Measured: a roll lifts the sub-250 Hz band by 15.4 dB and
-stays above the bed for about 4.5 s (3.2 s of that more than 3 dB up), while
-the full-band 250 ms level rises 5.6 dB. This is a sleep app; a roll must never
-be a jump scare.
+Rolls arrive every 15-45 s (first at 5-15 s so the sound announces itself), so
+~1-3 per minute. A prominent event is inherently peaky and loud: the raw roll +
+bed + crack can sum past 1.5, so the generator carries **its own soft limiter**
+(knee 0.62, ceiling 0.88) — below the knee, i.e. the bed and ordinary rolls, it
+is a no-op, so it only shaves the rare peak and never distorts the rumble, and
+it keeps the output under the 0.9 mix-headroom ceiling instead of leaving the
+downstream clipper to distort every roll.
+
+**Calibration.** Because the rolls are frequent and loud on purpose, the 40 s
+*mean* runs ~2 dB hot — so this sound is calibrated on its **between-rolls bed**
+(the median of the RMS envelope, which the rolls cannot move) to −20 dBFS, the
+same as the other rain sounds, with the rolls as events above it. This is the
+right model for an event-driven sound; `GeneratorCalibrationTest` measures the
+median for Thunderstorm and the plain RMS for everything else.
 
 Knobs (`ThunderPreset`): intervals, first-roll window, duration, cutoff range,
-attack range, sub-roll count, crack probability, `peakAmplitude`, `bedTrim`.
+attack range, sub-roll count, crack probability, `peakAmplitude`, `bedTrim`;
+plus `MID_LEVEL`, `BROWN_LEVEL`, `ROLL_DUCK_DEPTH` and the limiter constants.
 
 ## Ocean
 
@@ -296,7 +314,12 @@ enough to hold the peak under 0.9 without squashing the ordinary cracks' sharp
 onset. Level variety per crack is kept modest (a flat spread, not the drops'
 squared-uniform) precisely so a heavy tail of rare-loud snaps does not inflate
 the crest the limiter then has to remove. `outputGain` is the measured
-calibration constant (currently 0.72) as for every other generator.
+calibration constant (currently 0.98) as for every other generator.
+
+The audible crackle density was later dialled back from ~9 to ~6 cracks/s
+(`cracklesPerSecond` 5-12, from 8-18) — closer to a real fire and calmer for a
+sleep app — with `outputGain` re-fit up to hold the −20 dBFS calibration after
+the drop in crack energy.
 
 **Tuning method.** The crackle was tuned by rendering the offline WAV and
 comparing its per-crack transient metrics — attack sharpness, spectral flatness,

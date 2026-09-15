@@ -5,6 +5,7 @@ import dev.jtiisto.noise.core.audio.dsp.Biquad
 import dev.jtiisto.noise.core.audio.dsp.BrownNoiseSource
 import dev.jtiisto.noise.core.audio.dsp.DualExponential
 import dev.jtiisto.noise.core.audio.dsp.NoiseRng
+import kotlin.math.tanh
 
 /**
  * @param minIntervalSeconds / [maxIntervalSeconds] gap between rolls.
@@ -18,14 +19,14 @@ import dev.jtiisto.noise.core.audio.dsp.NoiseRng
  *        app and a roll must never be a jump scare.
  */
 data class ThunderPreset(
-    val minIntervalSeconds: Float = 25f,
-    val maxIntervalSeconds: Float = 90f,
+    val minIntervalSeconds: Float = 15f,
+    val maxIntervalSeconds: Float = 45f,
     val firstMinSeconds: Float = 5f,
     val firstMaxSeconds: Float = 15f,
-    val minDurationSeconds: Float = 4f,
-    val maxDurationSeconds: Float = 9f,
-    val minCutoffHz: Float = 40f,
-    val maxCutoffHz: Float = 220f,
+    val minDurationSeconds: Float = 5f,
+    val maxDurationSeconds: Float = 11f,
+    val minCutoffHz: Float = 60f,
+    val maxCutoffHz: Float = 400f,
     /**
      * How far the roll's low-pass has fallen by the end of the event. Thunder
      * darkens as it decays: the later arrivals have travelled further through
@@ -39,8 +40,8 @@ data class ThunderPreset(
     val minAttackMs: Float = 30f,
     val maxAttackMs: Float = 150f,
     val maxSubRolls: Int = 3,
-    val crackProbability: Float = 0.25f,
-    val peakAmplitude: Float = 0.180f,
+    val crackProbability: Float = 0.7f,
+    val peakAmplitude: Float = 0.38f,
     val bedTrim: Float = 0.90f,
 ) {
     companion object {
@@ -49,7 +50,8 @@ data class ThunderPreset(
 }
 
 /**
- * Thunderstorm = the downpour bed plus rare, soft, distant rolls.
+ * Thunderstorm = its own darker, heavier storm bed (not the Downpour preset)
+ * plus occasional soft, distant rolls.
  *
  * A roll is modelled the way thunder actually reaches a listener several
  * kilometres away: the discharge is broadband, but air absorption and ground
@@ -62,9 +64,12 @@ data class ThunderPreset(
  *  * the envelope is 2-4 overlapping difference-of-exponentials "bumps"
  *    spread over the first half of the event, which is what gives a roll its
  *    characteristic re-swelling rather than a single decaying thud;
- *  * one roll in four also gets a short band-passed "crack" at onset, the
- *    direct path arriving before the smeared reflections. It is deliberately
- *    quiet — a full-level crack wakes people up.
+ *  * the *rumble* is the body: a prominent low-frequency rolling swell that
+ *    rises above the storm bed so the listener clearly hears thunder rolling,
+ *    not just the rain. The bed's low end is kept moderate so it does not mask
+ *    the roll. Many rolls also open with a short, soft 1.2-2.6 kHz "crack" —
+ *    the direct path before the smeared reflections — as a leading edge, kept
+ *    well below a startling clap.
  *
  * Left and right take independent brown streams under a shared envelope: the
  * roll is one event happening at both ears, but the air path decorrelates the
@@ -75,18 +80,32 @@ class ThunderstormGenerator(
     private val sampleRate: Int,
     seed: Long,
     private val preset: ThunderPreset = ThunderPreset.DEFAULT,
-    rainPreset: RainPreset = RainPreset.DOWNPOUR,
+    rainPreset: RainPreset = RainPreset.STORM,
 ) : SoundGenerator {
 
     private val rain = RainGenerator(sampleRate, streamSeed(seed, 31), rainPreset, preset.bedTrim)
     private val rng = NoiseRng(streamSeed(seed, 32))
-    private val brownLeft = BrownNoiseSource(sampleRate, NoiseRng(streamSeed(seed, 33)))
-    private val brownRight = BrownNoiseSource(sampleRate, NoiseRng(streamSeed(seed, 34)))
+    // Held so reset(seed) can reseed them (BrownNoiseSource.reset clears only
+    // the filter state); otherwise the rumble would not be reproducible after a
+    // reset once a roll had drawn brown noise.
+    private val brownRngLeft = NoiseRng(streamSeed(seed, 33))
+    private val brownRngRight = NoiseRng(streamSeed(seed, 34))
+    private val brownLeft = BrownNoiseSource(sampleRate, brownRngLeft)
+    private val brownRight = BrownNoiseSource(sampleRate, brownRngRight)
     private val crackRng = NoiseRng(streamSeed(seed, 35))
+    private val midRngLeft = NoiseRng(streamSeed(seed, 36))
+    private val midRngRight = NoiseRng(streamSeed(seed, 37))
 
     private val toneLeft = Biquad()
     private val toneRight = Biquad()
     private val crackBand = Biquad()
+    // A low-mid "body" band for the roll. The deep brown rumble carries the
+    // weight on speakers with real low end, but a phone speaker rolls off hard
+    // below ~350 Hz and cannot reproduce it at all, so the roll would be silent
+    // on the target device. This band (~400 Hz-1.3 kHz) puts the roll where a
+    // phone can play it, so thunder rolls audibly everywhere.
+    private val midLeft = Biquad()
+    private val midRight = Biquad()
 
     // Up to four overlapping envelope bumps make one roll.
     private val bumpDelay = IntArray(MAX_BUMPS)
@@ -118,7 +137,15 @@ class ThunderstormGenerator(
         private set
 
     init {
+        configureMid()
         scheduleFirstRoll()
+    }
+
+    private fun configureMid() {
+        midLeft.reset()
+        midRight.reset()
+        midLeft.setBandPass(sampleRate, MID_CENTRE_HZ, MID_Q)
+        midRight.setBandPass(sampleRate, MID_CENTRE_HZ, MID_Q)
     }
 
     override fun render(left: FloatArray, right: FloatArray, frames: Int) {
@@ -136,9 +163,26 @@ class ThunderstormGenerator(
                 }
                 val envelope = advanceRollEnvelope()
                 if (envelope > 0f) {
+                    // Duck the rain bed under the roll (proportional to the roll
+                    // envelope) so the thunder stands out — essential on a phone
+                    // speaker, which cannot reproduce the deep rumble and where
+                    // the roll would otherwise be buried under the steady rain.
+                    val duck = 1f - ROLL_DUCK_DEPTH * envelope
+                    left[i] *= duck
+                    right[i] *= duck
                     val amplitude = envelope * preset.peakAmplitude
-                    left[i] += toneLeft.process(brownLeft.next()) * amplitude
-                    right[i] += toneRight.process(brownRight.next()) * amplitude
+                    // The mid body is an onset element: strongest at the strike
+                    // and gone by the tail, so the roll darkens to a pure deep
+                    // rumble the way real thunder does (the mid/direct arrivals
+                    // fade first, the low rumble lingers). It also gives a phone
+                    // speaker a cue at the onset without keeping high content in
+                    // the tail that would flatten the darkening.
+                    val midFade = 1f - (rollElapsed.toFloat() / rollDurationSamples).coerceIn(0f, 1f)
+                    val mid = MID_LEVEL * midFade
+                    left[i] += (toneLeft.process(brownLeft.next()) * BROWN_LEVEL +
+                        midLeft.process(midRngLeft.nextFloat()) * mid) * amplitude
+                    right[i] += (toneRight.process(brownRight.next()) * BROWN_LEVEL +
+                        midRight.process(midRngRight.nextFloat()) * mid) * amplitude
                 }
                 rollSamplesLeft--
                 rollElapsed++
@@ -156,18 +200,40 @@ class ThunderstormGenerator(
                     right[i] += s
                 }
             }
+
+            // Keep the generator's own output under the mix-headroom ceiling: a
+            // loud roll + bed + crack coincidence can sum past 1.5, which the
+            // downstream MixRenderer clipper would then distort on every roll.
+            // Below the knee — the bed and ordinary rolls — this is a no-op, so
+            // it only shaves the rare peak. It also pulls the RMS back into the
+            // calibration window, since the loudest rolls no longer run away.
+            left[i] = softLimit(left[i])
+            right[i] = softLimit(right[i])
         }
+    }
+
+    private fun softLimit(x: Float): Float {
+        val a = if (x < 0f) -x else x
+        if (a <= LIMIT_KNEE) return x
+        val over = (a - LIMIT_KNEE) / (LIMIT_CEIL - LIMIT_KNEE)
+        val shaped = LIMIT_KNEE + (LIMIT_CEIL - LIMIT_KNEE) * tanh(over)
+        return if (x < 0f) -shaped else shaped
     }
 
     override fun reset(seed: Long) {
         rain.reset(streamSeed(seed, 31))
         rng.reseed(streamSeed(seed, 32))
+        brownRngLeft.reseed(streamSeed(seed, 33))
+        brownRngRight.reseed(streamSeed(seed, 34))
         brownLeft.reset()
         brownRight.reset()
         crackRng.reseed(streamSeed(seed, 35))
+        midRngLeft.reseed(streamSeed(seed, 36))
+        midRngRight.reseed(streamSeed(seed, 37))
         toneLeft.reset()
         toneRight.reset()
         crackBand.reset()
+        configureMid()
         rollSamplesLeft = 0
         rollElapsed = 0
         crackSamplesLeft = 0
@@ -228,14 +294,14 @@ class ThunderstormGenerator(
     }
 
     private fun startCrack() {
-        val decaySamples = rng.nextRange(60f, 150f) * sampleRate / 1000f
+        val decaySamples = rng.nextRange(50f, 130f) * sampleRate / 1000f
         val attackSamples = decaySamples / 12f
         crackDecayCoefficient = DualExponential.decayCoefficient(decaySamples)
         crackAttackCoefficient = DualExponential.decayCoefficient(attackSamples)
         crackDecayState = 1f
         crackAttackState = 1f
         crackSamplesLeft = (decaySamples * 2f).toInt()
-        crackBand.setBandPass(sampleRate, rng.nextRange(1_200f, 2_200f), 1.2f)
+        crackBand.setBandPass(sampleRate, rng.nextRange(1_200f, 2_600f), 1.2f)
         crackBand.reset()
         crackAmplitude = preset.peakAmplitude * CRACK_LEVEL /
             DualExponential.peak(decaySamples / attackSamples)
@@ -270,10 +336,35 @@ class ThunderstormGenerator(
     private companion object {
         const val MAX_BUMPS = 4
         const val TONE_Q = 0.707f
+        /** Low-mid "body" band of the roll, above a phone speaker's low-end
+         *  roll-off (~350 Hz) and below the hissy region, so the rumble is
+         *  audible on the built-in speaker of the target device. */
+        const val MID_CENTRE_HZ = 720f
+        const val MID_Q = 0.8f
+        /** Level of the phone-audible mid body relative to the deep rumble. A
+         *  band-passed white burst is far quieter than its input, so this is
+         *  large; it is fitted by measurement, not a raw ratio. */
+        const val MID_LEVEL = 3.0f
+        /** Deep brown rumble weight. Below a phone speaker's roll-off it is
+         *  inaudible yet peaks hard, so it is held back from the old implicit
+         *  1.0 to free headroom for the phone-audible mid body. */
+        const val BROWN_LEVEL = 1.0f
+        /** How far the rain bed ducks under a roll at the envelope's peak
+         *  (0.6 = about -8 dB), so thunder reads clearly on a small speaker. */
+        const val ROLL_DUCK_DEPTH = 0.25f
+
+        /** Soft-limiter knee/ceiling on the generator's own output, so a loud
+         *  roll never presents a past-full-scale peak to the mix clipper. */
+        const val LIMIT_KNEE = 0.62f
+        const val LIMIT_CEIL = 0.88f
         const val CONTROL_PERIOD = 64
         /** Rendered roll length as a multiple of the nominal event duration. */
         const val TAIL_FACTOR = 1.6f
-        /** The crack sits 9 dB under the roll's own peak — audible, never startling. */
-        const val CRACK_LEVEL = 0.35f
+        /** A modest bright onset snap (1.2-2.6 kHz) that gives a roll its
+         *  leading edge. The *rumble* is the body of the sound the listener is
+         *  meant to hear — a prominent low rolling swell — so the crack is kept
+         *  soft (a fraction of the rumble's level): a distant edge, never a
+         *  startling clap. */
+        const val CRACK_LEVEL = 1.5f
     }
 }
