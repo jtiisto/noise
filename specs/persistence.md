@@ -41,10 +41,11 @@ app start where nothing could handle the failure. Specifically:
 ## Backup
 `android:allowBackup` stays on, scoped by `res/xml/backup_rules.xml` (API
 26–30) and `res/xml/data_extraction_rules.xml` (API 31+, cloud backup and
-device-to-device transfer alike): the DataStore file
-`datastore/hush.preferences_pb` — mix, volumes, settings, last timer choice —
-is included; the crash-report directory `crash/` is excluded, because a trace
-from one device says nothing about the next and should not follow the user
-into a fresh install. A restored timer end time that already passed simply
+device-to-device transfer alike): only the DataStore directory is included
+— `datastore/hush.preferences_pb` carries the mix, volumes, settings and
+last timer choice. The crash-report directory `crash/` is simply outside the
+include set (an explicit exclude that no include covers is a fatal lint
+error), so a trace from one device never follows the user into a fresh
+install. A restored timer end time that already passed simply
 does not resume (see **Resume**).
 

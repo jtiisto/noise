@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Auto Backup scope on API 26–30 (API 31+ reads data_extraction_rules.xml).
-  The DataStore file carries the mix, volumes, settings and last timer choice
-  and is worth keeping across devices; a crash trace from one device says
-  nothing about the next, so it stays behind. See specs/persistence.md.
+  Only the DataStore directory is included: it carries the mix, volumes,
+  settings and last timer choice, which are worth keeping across devices.
+  Everything else — notably the crash-report directory, whose trace from one
+  device says nothing about the next — is outside the include set and so
+  never backed up. See specs/persistence.md.
 -->
 <full-backup-content>
-    <include domain="file" path="datastore/" />
-    <exclude domain="file" path="crash/" />
+    <include domain="file" path="datastore" />
 </full-backup-content>
