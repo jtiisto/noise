@@ -7,7 +7,7 @@ service and the media session all observe. The service exists only to keep
 the process foreground and to expose media controls; nothing decides anything
 inside it.
 
-## Public API (`dev.jtiisto.noise.core.playback`)
+## Public API (`dev.tapio.hush.core.playback`)
 ```kotlin
 data class PlaybackSettings(
     val fadeOutSeconds: Int = 45,          // sleep-timer fade window (15/30/45/60/120)
@@ -143,7 +143,7 @@ interface PlaybackController {
   declared in the **library** manifest (`core/playback/src/main/`) with
   `foregroundServiceType="mediaPlayback"`, exported, and the
   `androidx.media3.session.MediaSessionService` intent filter.
-- DI: `playbackModule` (`dev.jtiisto.noise.core.playback.di`) binds
+- DI: `playbackModule` (`dev.tapio.hush.core.playback.di`) binds
   `PlaybackController` (eager), `StateStore`, `AudioFocusGate`,
   `ServiceLauncher`, `Clock` and the application `CoroutineScope`
   (`SupervisorJob + Main.immediate`, qualifier `ApplicationScope`). It

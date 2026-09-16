@@ -12,12 +12,12 @@ import org.gradle.kotlin.dsl.withType
 internal const val COMPILE_SDK = 37
 internal const val MIN_SDK = 26
 internal const val TARGET_SDK = 36
-internal const val BASE_PACKAGE = "dev.jtiisto.noise"
+internal const val BASE_PACKAGE = "dev.tapio.hush"
 
 internal val Project.libs: VersionCatalog
     get() = extensions.getByType<VersionCatalogsExtension>().named("libs")
 
-/** Namespace derived from the Gradle path: ":core:audio" -> "dev.jtiisto.noise.core.audio". */
+/** Namespace derived from the Gradle path: ":core:audio" -> "dev.tapio.hush.core.audio". */
 internal val Project.derivedNamespace: String
     get() = BASE_PACKAGE + path.replace(":", ".")
 

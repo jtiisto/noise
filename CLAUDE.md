@@ -4,7 +4,7 @@
 Native Android sleep-sound app: layered coloured noise + procedurally
 synthesized ambience (rain, ocean, wind, fire…), sleep timer, background
 playback with media controls. Personal side-loaded app — no network, no
-accounts. App name **Hush**, package `dev.jtiisto.noise`.
+accounts. App name **Hush**, package `dev.tapio.hush`.
 
 Targets modest hardware (minSdk 26, targetSdk 36, compileSdk 37): the audio
 engine is allocation-free pure Kotlin on one thread, UI motion is minimal, the
@@ -59,7 +59,7 @@ noise/
   */build/test-results/testDebugUnitTest */*/build/test-results/testDebugUnitTest`
   and re-run `./gradlew testDebugUnitTest koverVerifyAggregated --no-build-cache --rerun-tasks`.
   Prefer the unscoped `./gradlew testDebugUnitTest` before any push.
-- Emulator workflow: `/adb-connect`, `/adb-deploy` (`dev.jtiisto.noise/.MainActivity`).
+- Emulator workflow: `/adb-connect`, `/adb-deploy` (`dev.tapio.hush/.MainActivity`).
   Without an emulator, ship the APK: `rclone copyto app/build/outputs/apk/release/app-release.apk "gdrive:Hush/APKs/hush-<yyyymmdd-hhmm>.apk"`
   and/or `/personal-share`.
 

@@ -8,7 +8,7 @@
     -->
     <application>
         <service
-            android:name="dev.jtiisto.noise.core.playback.service.HushPlaybackService"
+            android:name="dev.tapio.hush.core.playback.service.HushPlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>

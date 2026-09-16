@@ -15,12 +15,12 @@ val localProperties: Properties = Properties().apply {
 val keystorePath = localProperties.getProperty("hush.keystore")?.trim().orEmpty()
 
 android {
-    namespace = "dev.jtiisto.noise"
+    namespace = "dev.tapio.hush"
 
     defaultConfig {
-        applicationId = "dev.jtiisto.noise"
-        versionCode = 9
-        versionName = "0.1.8"
+        applicationId = "dev.tapio.hush"
+        versionCode = 10
+        versionName = "0.2.0"
     }
 
     signingConfigs {

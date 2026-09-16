@@ -17,16 +17,16 @@ and palette match the shipped critters; each scene's glow and a few props pick u
 the sound's accent hue (`accentFor`) so it stays coherent on the night ground.
 
 ## Where it lives
-- `app/src/main/kotlin/dev/jtiisto/noise/ui/critterscenes/CritterScene.kt` — the
+- `app/src/main/kotlin/dev/tapio/hush/ui/critterscenes/CritterScene.kt` — the
   `@Composable CritterScene(kind, isPlaying, palette, variant, size)` (live) and
   `internal CritterSceneFrame(…)` (phase-pinned, for screenshots). It dispatches
   on the existing `CritterKind`, reuses `critterFor(mix)` from `ui/critter`, and
   reuses that package's unit-tested `pulse()` motion helper. All colours, helpers
   and per-scene art live inside a single drawing-only `DrawScope.drawScene(…)`, so
   the package carries no counted logic; it is Kover-excluded.
-- `app/src/main/kotlin/dev/jtiisto/noise/ui/home/HomeScreen.kt` — the real Home
+- `app/src/main/kotlin/dev/tapio/hush/ui/home/HomeScreen.kt` — the real Home
   now shows `CritterScene` (was `Critter`) as a decorative overlay in the orb box.
-- `app/src/screenshotTest/kotlin/dev/jtiisto/noise/CritterSceneMockups.kt` — the
+- `app/src/screenshotTest/kotlin/dev/tapio/hush/CritterSceneMockups.kt` — the
   isolated gallery/detail/alternates/placement studies plus `SceneMotionFrames`
   (phase-pinned key frames). Rendered PNGs land under
   `app/src/screenshotTestDebug/reference/.../CritterSceneMockupsKt/`. The real

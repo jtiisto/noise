@@ -6,7 +6,7 @@ smooth gain control, and push the result to `AudioTrack` from one dedicated
 thread with zero allocation in the render loop. All DSP is pure Kotlin and
 unit-testable on the JVM; only the `AudioTrack` sink touches Android.
 
-## Public API (`dev.jtiisto.noise.core.audio`)
+## Public API (`dev.tapio.hush.core.audio`)
 ```kotlin
 interface AudioEngine {
     val isRunning: Boolean

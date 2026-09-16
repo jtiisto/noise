@@ -136,7 +136,7 @@ survives a focus-loss/gain cycle. `AndroidWakeLock` wraps a non-reference-counte
 `PARTIAL_WAKE_LOCK`. Six unit tests cover every transition (play/pause, focus
 loss+gain, timer fade to completion, clear, focus-denied).
 
-Verified on the emulator: `hush:playback` held (uid=dev.jtiisto.noise) while
+Verified on the emulator: `hush:playback` held (uid=dev.tapio.hush) while
 playing, released on pause — after discovering that `adb install -r` had been
 silently not updating the emulator (stale APK), which masked the fix through
 several rounds. Lesson recorded below.
