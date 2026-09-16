@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
@@ -52,12 +53,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -66,7 +69,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tapio.hush.R
 import dev.tapio.hush.core.model.Mix
@@ -87,6 +93,7 @@ import dev.tapio.hush.ui.formatCountdown
 import dev.tapio.hush.ui.formatPercent
 import dev.tapio.hush.ui.remainingMinutes
 import dev.tapio.hush.ui.settings.SettingsSheet
+import dev.tapio.hush.ui.theme.CardShape
 import dev.tapio.hush.ui.theme.HushColor
 import dev.tapio.hush.ui.theme.HushSize
 import dev.tapio.hush.ui.theme.HushSpacing
@@ -182,6 +189,8 @@ fun HomeScreen(
             HomeHeader(
                 timer = timer,
                 palette = palette,
+                volume = state.masterVolume,
+                onVolumeChange = actions::onMasterVolumeChange,
                 onTimerClick = actions::onTimerPillClick,
                 onSettingsClick = actions::onSettingsClick,
                 modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars),
@@ -196,6 +205,7 @@ fun HomeScreen(
                     ) {
                         PlaybackContent(state, ui, actions, palette, onPlaybackRequested)
                         CatalogContent(mix = mix, actions = actions, scenesScroll = scenesScroll)
+                        Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
                     }
                     is HomeLayout.Wide -> Row(Modifier.fillMaxSize()) {
                         // Centred while it fits; once a three-layer mix card
@@ -208,6 +218,7 @@ fun HomeScreen(
                             verticalArrangement = Arrangement.Center,
                         ) {
                             PlaybackContent(state, ui, actions, palette, onPlaybackRequested)
+                            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
                         }
                         Column(
                             Modifier
@@ -222,6 +233,7 @@ fun HomeScreen(
                                 scenesScroll = scenesScroll,
                                 columns = layout.catalogColumns,
                             )
+                            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
                         }
                     }
                 }
@@ -230,6 +242,7 @@ fun HomeScreen(
                     hostState = snackbarHostState,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
                         .padding(horizontal = HushSpacing.md, vertical = HushSpacing.sm),
                 ) { data ->
                     Snackbar(
@@ -240,12 +253,6 @@ fun HomeScreen(
                     )
                 }
             }
-
-            MasterVolumeBar(
-                volume = state.masterVolume,
-                palette = palette,
-                onVolumeChange = actions::onMasterVolumeChange,
-            )
         }
     }
 
@@ -420,32 +427,70 @@ private fun CatalogContent(
 private fun HomeHeader(
     timer: TimerState?,
     palette: State<MixPalette>,
+    volume: Float,
+    onVolumeChange: (Float) -> Unit,
     onTimerClick: () -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .padding(start = HushSpacing.screen, end = HushSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.wordmark).uppercase(),
-            style = WordmarkStyle,
-            color = HushColor.TextPrimary,
-        )
-        Spacer(Modifier.weight(1f))
-        TimerPill(timer = timer, accent = palette.value.accent, onClick = onTimerClick)
-        Spacer(Modifier.width(HushSpacing.xs))
-        HushIconButton(
-            icon = Icons.Rounded.Settings,
-            contentDescription = stringResource(R.string.cd_settings),
-            onClick = onSettingsClick,
-            tint = HushColor.TextSecondary,
-            iconSize = 21.dp,
-        )
+    // Open/closed is local, like a menu's: nothing else needs to know.
+    var volumeOpen by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val popoverPosition = remember(density) {
+        with(density) { BelowAnchorEnd(endPaddingPx = HushSpacing.md.roundToPx(), gapPx = HushSpacing.xs.roundToPx()) }
+    }
+    Box(modifier) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(start = HushSpacing.screen, end = HushSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The wordmark takes the slack: with three fixed controls on the
+            // right, a large font scale on a 320 dp phone must squeeze the
+            // word, never push the settings button off the edge.
+            Text(
+                text = stringResource(R.string.wordmark).uppercase(),
+                style = WordmarkStyle,
+                color = HushColor.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            HushIconButton(
+                icon = volumeIcon(volume),
+                contentDescription = stringResource(R.string.cd_master_volume, formatPercent(volume)),
+                onClick = { volumeOpen = !volumeOpen },
+                tint = HushColor.TextSecondary,
+                iconSize = 21.dp,
+            )
+            Spacer(Modifier.width(HushSpacing.xs))
+            TimerPill(timer = timer, accent = palette.value.accent, onClick = onTimerClick)
+            Spacer(Modifier.width(HushSpacing.xs))
+            HushIconButton(
+                icon = Icons.Rounded.Settings,
+                contentDescription = stringResource(R.string.cd_settings),
+                onClick = onSettingsClick,
+                tint = HushColor.TextSecondary,
+                iconSize = 21.dp,
+            )
+        }
+        if (volumeOpen) {
+            // The popover hangs under the header, flush with its end margin,
+            // so it is never pushed off a narrow phone whatever the pill says.
+            Popup(
+                popupPositionProvider = popoverPosition,
+                onDismissRequest = { volumeOpen = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                MasterVolumePopoverContent(
+                    volume = volume,
+                    accent = palette.value.accent,
+                    onVolumeChange = onVolumeChange,
+                )
+            }
+        }
     }
 }
 
@@ -556,62 +601,57 @@ private fun SceneRow(activeSceneId: String?, actions: HomeActions, scrollState: 
 }
 
 /**
- * The pinned bottom bar. It fades from the page into an almost-opaque ground
- * so the catalog can scroll under it and stay legible.
+ * The volume popover's body: speaker, the master slider and the percentage
+ * on a sheet-coloured card. Public because a `Popup` lives in its own
+ * window, which the screenshot harness cannot capture, so the reference
+ * renders this directly on the night ground.
  */
 @Composable
-private fun MasterVolumeBar(
+fun MasterVolumePopoverContent(
     volume: Float,
-    palette: State<MixPalette>,
+    accent: Color,
     onVolumeChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val scrim = remember {
-        Brush.verticalGradient(
-            0f to HushColor.NightTop.copy(alpha = 0f),
-            0.4f to HushColor.NightTop.copy(alpha = 0.90f),
-            1f to HushColor.NightTop.copy(alpha = 0.97f),
+    Row(
+        modifier
+            .width(POPOVER_WIDTH)
+            .clip(CardShape)
+            .background(HushColor.NightSheet)
+            .border(1.dp, HushColor.HairlineStrong, CardShape)
+            .padding(horizontal = HushSpacing.lg, vertical = HushSpacing.md),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = volumeIcon(volume),
+            contentDescription = null,
+            tint = HushColor.TextSecondary,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(HushSpacing.md))
+        HushSlider(
+            value = volume,
+            onValueChange = onVolumeChange,
+            accent = accent,
+            label = stringResource(R.string.master_volume),
+            modifier = Modifier.weight(1f),
+        )
+        Spacer(Modifier.width(HushSpacing.md))
+        Text(
+            text = formatPercent(volume),
+            style = MaterialTheme.typography.labelSmall,
+            color = HushColor.TextTertiary,
+            modifier = Modifier.width(30.dp),
+            textAlign = TextAlign.End,
         )
     }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(scrim)
-            .windowInsetsPadding(WindowInsets.navigationBars),
-    ) {
-        Spacer(Modifier.height(HushSpacing.md))
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = HushSpacing.screen)
-                .padding(bottom = HushSpacing.xs),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = when {
-                    volume <= 0f -> Icons.AutoMirrored.Rounded.VolumeOff
-                    volume < 0.5f -> Icons.AutoMirrored.Rounded.VolumeDown
-                    else -> Icons.AutoMirrored.Rounded.VolumeUp
-                },
-                contentDescription = null,
-                tint = HushColor.TextSecondary,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(HushSpacing.md))
-            HushSlider(
-                value = volume,
-                onValueChange = onVolumeChange,
-                accent = palette.value.accent,
-                label = stringResource(R.string.master_volume),
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(HushSpacing.md))
-            Text(
-                text = formatPercent(volume),
-                style = MaterialTheme.typography.labelSmall,
-                color = HushColor.TextTertiary,
-                modifier = Modifier.width(30.dp),
-                textAlign = TextAlign.End,
-            )
-        }
-    }
 }
+
+/** Off, low or high — the same glyph on the header button and in the card. */
+private fun volumeIcon(volume: Float): ImageVector = when {
+    volume <= 0f -> Icons.AutoMirrored.Rounded.VolumeOff
+    volume < 0.5f -> Icons.AutoMirrored.Rounded.VolumeDown
+    else -> Icons.AutoMirrored.Rounded.VolumeUp
+}
+
+private val POPOVER_WIDTH = 280.dp

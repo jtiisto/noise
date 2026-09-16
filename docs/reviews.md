@@ -227,3 +227,22 @@ Also exercised on the emulator by overriding the logical display: 1280 × 800
 and 800 × 1280 dp (10"), 1024 × 600 and 600 × 1024 dp (7"), plus a real
 rotation with playback running — no crash, service and wake lock intact.
 
+## 2026-09-16 — Codex review of the header volume popover
+
+The pinned master-volume bar took a quarter of a landscape phone and 1280 dp
+of track on a tablet; it became a speaker button in the header that opens an
+anchored popover (`specs/ui.md`, Home items 1 and 6).
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| 1 | Medium | With three fixed controls on the right and an unweighted wordmark, a large font scale on a 320 dp phone could squeeze the settings button off the edge. | **Fixed** — the wordmark takes the slack (`weight(1f)`, single line, ellipsis); a 320 dp × 1.5 font-scale reference with the widest pill guards it. |
+| 2 | Medium | `HushSlider` has no keyboard focus or key handling, so a hardware keyboard can open the popover but not adjust it (inherited by every slider; TalkBack adjusts through `setProgress`). | **Accepted, follow-up** — noted in the spec's accessibility section; to fix for all sliders at once. |
+| 3 | Low | The position provider never clamped vertically; the platform's own clipping would have saved a short window. | **Fixed** — the origin is clamped on both axes; tested. |
+| 4 | Low | Test names overstated containment; inset anchors, exact fit and short windows were untested. | **Fixed** — renamed and extended. |
+
+Cleared: `PopupProperties(focusable = true)` + `onDismissRequest` handle outside tap
+and Back; `remember` state is right for a transient menu (it closes on rotation);
+the anchor is the inset header itself, no double-counted status bar; zero cost
+while closed; inset spacers and snackbar padding are independent. Verified on
+the emulator in both orientations: open, drag, outside-tap close, Back close.
+

@@ -38,7 +38,7 @@ the sound's accent hue (`accentFor`) so it stays coherent on the night ground.
   a little: inside the orb's existing 200 dp box (`HushSize.orb`),
   `Modifier.align(BottomCenter).offset(x = 52.dp, y = 18.dp)`, scene `size = 138.dp`.
 - **No non-critter layout changes** — the header, orb, mix title, status line,
-  mix card, scenes, catalog and bottom bar do not move. Clears the title, status
+  mix card, scenes and catalog do not move. Clears the title, status
   line and timer pill on both 320 dp and 411 dp.
 - **The orb stays fully tappable under the overlap.** The scene is a bare `Canvas`
   drawn as a **sibling after (above) the orb** in the same `Box`, with **no**

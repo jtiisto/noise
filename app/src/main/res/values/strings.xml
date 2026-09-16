@@ -8,6 +8,7 @@
     <string name="cd_timer_none">No sleep timer — playing until cancelled. Opens the sleep timer.</string>
     <string name="cd_timer_running">Sleep timer, %1$d minutes left. Opens the sleep timer.</string>
     <string name="cd_settings">Settings</string>
+    <string name="cd_master_volume">Master volume, %1$s. Opens the volume control.</string>
 
     <!-- Orb and status -->
     <string name="cd_play">Play</string>

@@ -20,7 +20,7 @@ import dev.tapio.hush.ui.timer.TimerSheetContent
  * Reference renders of every screen state in `specs/ui.md`.
  *
  * 360 × 780 is the common modern phone in dp; the 320 × 640 pair proves the
- * three-column catalog and the pinned volume bar still fit the smallest
+ * three-column catalog and the header's three controls still fit the smallest
  * screen the app supports. The wide set (600 dp and up) covers the two-pane
  * layout of `specs/ui.md`, **Layout**.
  */
@@ -72,6 +72,17 @@ fun HomeCrashNotice() {
 @Composable
 fun HomeSmallPhone() {
     HomeScreenPreview(PreviewStates.playingTrio)
+}
+
+/**
+ * The smallest phone at a 1.5× font scale with the widest pill ("No timer"):
+ * the wordmark gives way, the speaker, pill and settings all stay on screen.
+ */
+@PreviewTest
+@Preview(widthDp = SMALL_WIDTH, heightDp = SMALL_HEIGHT, fontScale = 1.5f, showBackground = true, backgroundColor = NIGHT)
+@Composable
+fun HomeSmallPhoneLargeFont() {
+    HomeScreenPreview(PreviewStates.playingUntilCancelled)
 }
 
 /** A 10" tablet in landscape: the playback pane at its 440 dp cap, six catalog columns. */

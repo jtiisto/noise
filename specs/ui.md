@@ -38,8 +38,10 @@
 
 ## Screens
 ### Home (single screen, vertical scroll)
-1. **Header** — "Hush" wordmark (small caps, tracked), right side: timer
-   pill, settings icon. The pill always states the current mode rather than
+1. **Header** — "Hush" wordmark (small caps, tracked), right side: the
+   master-volume speaker, timer pill, settings icon. The speaker's glyph
+   shows the level (off / low / high) and its description states the
+   percentage; tap → the **volume popover** (6). The pill always states the current mode rather than
    naming a screen, so "no timer" reads as a deliberate choice and not an
    absence: a crescent moon plus `27:31`, accent-tinted, while a timer runs;
    an infinity glyph plus "No timer", quiet, while none does. Tap → timer
@@ -77,10 +79,15 @@
    a small bottom sheet with the sound's blurb and a volume slider; when the
    sound is not in the mix that sheet offers "Add to mix" instead, disabled
    with a one-line reason when the mix is full.
-6. **Bottom bar** — master volume slider with speaker icon and a percentage
-   readout, always visible and pinned below the scroll. It sits on a vertical
-   scrim that fades from transparent into the night ground so the catalog can
-   scroll under it and stay legible (there is no blur available).
+6. **Volume popover** — tapping the header's speaker drops a 280 dp card
+   under the header, flush with its end margin: speaker glyph, the master
+   slider and the percentage readout. Tap outside or Back closes it. There is
+   no bottom bar on any form factor — a full-width pinned slider was a
+   quarter of a landscape phone and 1280 dp of track on a tablet — so the
+   scroll runs to the navigation bar and ends with that inset's height, and
+   the snackbar sits above it. The card is a `Popup` (its own window, which
+   the screenshot harness cannot capture), so the reference renders its body,
+   `MasterVolumePopoverContent`, on the night ground.
 
 ### Layout — window widths
 Home has exactly two layouts, chosen by the window's width class and nothing
@@ -90,9 +97,9 @@ only maps its answer to a tree):
   phone in portrait, and it is byte-identical to the shipped layout: the
   phone screenshot references are the regression gate for it.
 - **Wide (≥ 600 dp)** — tablets in either orientation, unfolded foldables and
-  phones in landscape (a 780 × 360 phone is wide). The header and the pinned
-  master-volume bar stay full-width and unchanged; the body between them
-  splits into two panes that scroll independently:
+  phones in landscape (a 780 × 360 phone is wide). The header stays
+  full-width and unchanged; the body below it splits into two panes that
+  scroll independently, each ending with the navigation bar's inset:
   - **Playback pane** (left, 42 % of the width, clamped 280–440 dp): the
     crash notice, the orb with its critter scene, the mix title and status
     line, and the mix card.
@@ -123,7 +130,7 @@ a control.
   (`HushSize.orb`), aligned to the bottom-centre so it "sits" at the base of
   the orb, in the gap that was already there between the rings and the mix
   title. **No layout changes:** the orb box keeps its size, so the header, orb,
-  mix title, status line, mix card, scenes, catalog and bottom bar do not move.
+  mix title, status line, mix card, scenes and catalog do not move.
   The critter never covers the play/pause glyph (centred, well above it), the
   mix title, the timer pill or any control, and it stays clear on both the
   320 dp and 411 dp widths because it is anchored to the centred orb, not the
@@ -263,7 +270,10 @@ form a single list, bracketed by two full-width rows:
   `ProgressBarRangeInfo`, a percentage (or a duration, for the custom timer
   length) as their state description and a `setProgress` action; tiles
   announce "selected"; minimum 48 dp touch targets (chips and icon buttons
-  stay visually small via `minimumInteractiveComponentSize`).
+  stay visually small via `minimumInteractiveComponentSize`). Known gap:
+  `HushSlider` has no keyboard focus or arrow-key handling, so a hardware
+  keyboard can open the volume popover but not move its slider (TalkBack
+  can, through `setProgress`) — a follow-up for all sliders at once.
 - State comes only from `PlaybackController.state`; the UI is a pure
   function of it plus local sheet-visibility state in a `HomeViewModel`.
   Callbacks reach the tree through one stable `HomeActions` interface that
