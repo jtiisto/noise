@@ -94,6 +94,9 @@ build had ever been run on a device — see docs/reviews.md).
   crashes with `adb logcat -b crash`. Smoke path: launch, add a sound, play,
   allow notifications, add a third sound, confirm `isForeground=true` and no
   FATAL, swipe away and reopen, start a short timer and let it fade out.
+  After the fade the engine stops at once (wake lock gone, session not
+  playing) but the service retires itself only after a 60 s idle grace
+  (`IDLE_STOP_MILLIS`) — check `dumpsys activity services` after that.
 - **`adb install -r` can silently no-op** (leaving a stale APK on the device),
   which once masked a working fix through several test rounds. Always
   `adb uninstall` then `adb install`, and assert the installed base.apk md5
@@ -102,15 +105,16 @@ build had ever been run on a device — see docs/reviews.md).
   renders; confirm with `dumpsys power | sed -n '/Wake Locks:/,/Suspend/p'`
   (held while playing, gone on pause).
 
-## Current Status (2026-09-12)
-v0.1.0 complete and reviewed: 16 synthesized sounds, 3-layer mixer, scenes,
-sleep timer with fade and an explicit until-cancelled mode, Media3 foreground
-playback with lock-screen controls, audio focus + becoming-noisy handling,
-persistence with resume after process death. 361 unit tests (model 7, audio
-143, playback 83, app 98 + 12 screenshot references), Kover gate 90 (baseline
-93.5 %). Codex review #1 findings all fixed (`docs/reviews.md`). Release APK
-1.7 MB, signed with the local keystore. Exercised on a headless API 35 emulator — first on-device checks to do: notification/lock-screen controls,
-headphone unplug, timer fade at the end, resume after force-stop, and the
-subjective sound quality of stream/thunder/rain (see `docs/sound-design.md`
-for the tuning knobs).
-
+## Current Status (2026-09-16)
+v0.2.0: the app is `dev.tapio.hush` (full source rename; the Gradle root
+keeps its working title). 16 synthesized sounds, 3-layer mixer, scenes, sleep
+timer with fade and until-cancelled, Media3 foreground playback with
+lock-screen controls, audio focus + becoming-noisy handling, persistence with
+resume after process death, scoped Auto Backup. Two layouts: the phone column
+and, from 600 dp, a two-pane split (`specs/ui.md`, **Layout**); no
+orientation lock. Play readiness is done in-repo (`docs/release.md`): AAB
+build verified through bundletool, 16 KB alignment, store art rendered by the
+screenshot harness, privacy policy; the Play Console steps are parked until
+the developer account exists. Gate: unit suite + Kover (90, baseline ~93 %),
+31 screenshot references, `lintVitalRelease`. Reviews and their resolutions
+live in `docs/reviews.md`.
