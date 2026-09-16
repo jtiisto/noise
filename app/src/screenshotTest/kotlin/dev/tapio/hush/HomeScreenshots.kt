@@ -21,7 +21,8 @@ import dev.tapio.hush.ui.timer.TimerSheetContent
  *
  * 360 × 780 is the common modern phone in dp; the 320 × 640 pair proves the
  * three-column catalog and the pinned volume bar still fit the smallest
- * screen the app supports.
+ * screen the app supports. The wide set (600 dp and up) covers the two-pane
+ * layout of `specs/ui.md`, **Layout**.
  */
 private const val PHONE_WIDTH = 360
 private const val PHONE_HEIGHT = 780
@@ -71,6 +72,38 @@ fun HomeCrashNotice() {
 @Composable
 fun HomeSmallPhone() {
     HomeScreenPreview(PreviewStates.playingTrio)
+}
+
+/** A 10" tablet in landscape: the playback pane at its 440 dp cap, six catalog columns. */
+@PreviewTest
+@Preview(widthDp = 1280, heightDp = 800, showBackground = true, backgroundColor = NIGHT)
+@Composable
+fun HomeTabletLandscape() {
+    HomeScreenPreview(PreviewStates.playingTrio)
+}
+
+/** The same tablet upright: still two panes, three columns, "No timer" pill. */
+@PreviewTest
+@Preview(widthDp = 800, heightDp = 1280, showBackground = true, backgroundColor = NIGHT)
+@Composable
+fun HomeTabletPortrait() {
+    HomeScreenPreview(PreviewStates.playingUntilCancelled)
+}
+
+/** A phone on its side is wide too; both panes scroll in the short window. */
+@PreviewTest
+@Preview(widthDp = 780, heightDp = 360, showBackground = true, backgroundColor = NIGHT)
+@Composable
+fun HomePhoneLandscape() {
+    HomeScreenPreview(PreviewStates.playingTrio)
+}
+
+/** The narrowest window that splits at all: a 280 dp playback pane and a phone-width catalog. */
+@PreviewTest
+@Preview(widthDp = 600, heightDp = 960, showBackground = true, backgroundColor = NIGHT)
+@Composable
+fun HomeWideSmallest() {
+    HomeScreenPreview(PreviewStates.idle)
 }
 
 /**

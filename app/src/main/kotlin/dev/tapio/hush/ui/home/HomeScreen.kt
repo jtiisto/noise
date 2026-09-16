@@ -11,20 +11,27 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -52,6 +59,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -60,6 +69,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.tapio.hush.R
+import dev.tapio.hush.core.model.Mix
 import dev.tapio.hush.core.model.SoundCategory
 import dev.tapio.hush.core.model.SoundId
 import dev.tapio.hush.core.model.Scenes
@@ -108,9 +118,11 @@ fun HomeScreen(
 /**
  * The whole app, as a pure function of [state] plus the local [ui].
  *
- * One vertical scroll holds everything between the fixed header and the
- * pinned master-volume bar, so the orb scrolls away with the catalog rather
- * than the catalog scrolling inside a window of its own.
+ * On a phone one vertical scroll holds everything between the fixed header
+ * and the pinned master-volume bar, so the orb scrolls away with the catalog
+ * rather than the catalog scrolling inside a window of its own. From 600 dp
+ * the body splits into two panes instead (see [HomeLayout]); the header and
+ * the bar stay full-width in both.
  *
  * [onPlaybackRequested] fires just before anything that will make sound; the
  * host uses it to ask for the notification permission exactly once.
@@ -137,12 +149,36 @@ fun HomeScreen(
         }
     }
 
-    Box(
+    BoxWithConstraints(
         modifier
             .fillMaxSize()
             .auroraBackground(palette),
     ) {
-        Column(Modifier.fillMaxSize()) {
+        // Side insets — a landscape phone's navigation bar, a cutout — come
+        // off the usable width before the split is decided, and are padded
+        // once around the shared column. windowInsetsPadding consumes what it
+        // pads, so the bar's own navigation-bar padding stays bottom-only,
+        // and the aurora behind stays edge-to-edge.
+        val sideInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)
+        val density = LocalDensity.current
+        val layoutDirection = LocalLayoutDirection.current
+        val insetWidth = with(density) {
+            (sideInsets.getLeft(this, layoutDirection) + sideInsets.getRight(this, layoutDirection)).toDp()
+        }
+        // The usable width alone picks the phone column or the two-pane
+        // split; the header and the volume bar are shared by both.
+        val layout = HomeLayout.from((maxWidth - insetWidth).value.toInt())
+        // Hoisted above the split so a fold or a resize across 600 dp keeps
+        // every scroll position instead of throwing the page back to the top.
+        val compactScroll = rememberScrollState()
+        val playbackScroll = rememberScrollState()
+        val catalogScroll = rememberScrollState()
+        val scenesScroll = rememberScrollState()
+        Column(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(sideInsets),
+        ) {
             HomeHeader(
                 timer = timer,
                 palette = palette,
@@ -152,109 +188,42 @@ fun HomeScreen(
             )
 
             Box(Modifier.weight(1f)) {
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    Spacer(Modifier.height(HushSpacing.md))
-
-                    // Sits above the orb rather than over it: the app still
-                    // works, and the user came here to start a sound.
-                    AnimatedVisibility(
-                        visible = ui.crashNoticeVisible,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut(),
+                when (layout) {
+                    HomeLayout.Compact -> Column(
+                        Modifier
+                            .fillMaxSize()
+                            .verticalScroll(compactScroll),
                     ) {
-                        Column {
-                            CrashNoticeCard(
-                                onShare = {
-                                    ui.crashReport?.let { shareCrashReport(context, it) }
-                                    actions.onShareCrashReport()
-                                },
-                                onDismiss = actions::onDismissCrashReport,
-                                modifier = Modifier.padding(horizontal = HushSpacing.screen),
-                            )
-                            Spacer(Modifier.height(HushSpacing.lg))
+                        PlaybackContent(state, ui, actions, palette, onPlaybackRequested)
+                        CatalogContent(mix = mix, actions = actions, scenesScroll = scenesScroll)
+                    }
+                    is HomeLayout.Wide -> Row(Modifier.fillMaxSize()) {
+                        // Centred while it fits; once a three-layer mix card
+                        // makes it taller than the window it scrolls from the top.
+                        Column(
+                            Modifier
+                                .width(layout.playbackPaneDp.dp)
+                                .fillMaxHeight()
+                                .verticalScroll(playbackScroll),
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            PlaybackContent(state, ui, actions, palette, onPlaybackRequested)
                         }
-                    }
-
-                    // The orb and its critter scene share one 200 dp box, so the
-                    // layout is unchanged. The scene is a purely DECORATIVE sibling
-                    // drawn ABOVE the orb (later in the Box) and placed right of
-                    // centre at the orb's base: it shows on top of the play glyph
-                    // yet — being a bare Canvas with no pointer modifier — never
-                    // consumes touches, so the whole orb stays tappable under it.
-                    Box(Modifier.align(Alignment.CenterHorizontally).size(HushSize.orb)) {
-                        PlayOrb(
-                            isPlaying = state.isPlaying,
-                            enabled = !mix.isEmpty,
-                            palette = palette,
-                            contentDescription = stringResource(
-                                if (state.isPlaying) R.string.cd_pause else R.string.cd_play,
-                            ),
-                            onClick = {
-                                if (!state.isPlaying) onPlaybackRequested()
-                                actions.onPlayPauseClick()
-                            },
-                        )
-                        CritterScene(
-                            kind = critterFor(mix),
-                            isPlaying = state.isPlaying,
-                            palette = palette,
-                            // Lifted so the lowest art (cat cushion, frog puddle,
-                            // firefly grass) clears the mix title below the orb;
-                            // still right of centre and overlapping the orb.
-                            size = 126.dp,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .offset(x = 50.dp, y = (-8).dp),
-                        )
-                    }
-
-                    // The orb's box already carries its halo's worth of margin.
-                    Spacer(Modifier.height(HushSpacing.sm))
-                    NowPlayingText(state = state)
-
-                    Spacer(Modifier.height(HushSpacing.xl))
-                    AnimatedVisibility(
-                        visible = !mix.isEmpty,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut(),
-                    ) {
-                        Column {
-                            MixCard(
-                                layers = mix.layers,
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .verticalScroll(catalogScroll),
+                        ) {
+                            Spacer(Modifier.height(HushSpacing.md))
+                            CatalogContent(
+                                mix = mix,
                                 actions = actions,
-                                modifier = Modifier.padding(horizontal = HushSpacing.screen),
+                                scenesScroll = scenesScroll,
+                                columns = layout.catalogColumns,
                             )
-                            Spacer(Modifier.height(HushSpacing.xl))
                         }
                     }
-
-                    SectionHeader(
-                        title = stringResource(R.string.scenes_header),
-                        modifier = Modifier.padding(horizontal = HushSpacing.screen),
-                    )
-                    Spacer(Modifier.height(HushSpacing.md))
-                    SceneRow(activeSceneId = Scenes.matching(mix)?.id, actions = actions)
-
-                    Spacer(Modifier.height(HushSpacing.xl))
-                    SoundCategory.entries.forEach { category ->
-                        SectionHeader(
-                            title = category.title,
-                            modifier = Modifier.padding(horizontal = HushSpacing.screen),
-                        )
-                        Spacer(Modifier.height(HushSpacing.md))
-                        CatalogSection(
-                            sounds = SoundId.inCategory(category),
-                            mix = mix,
-                            actions = actions,
-                            modifier = Modifier.padding(horizontal = HushSpacing.screen),
-                        )
-                        Spacer(Modifier.height(HushSpacing.xl))
-                    }
-                    Spacer(Modifier.height(HushSpacing.sm))
                 }
 
                 SnackbarHost(
@@ -320,6 +289,131 @@ fun HomeScreen(
             onDismiss = actions::onSheetDismiss,
         )
     }
+}
+
+/**
+ * Everything about the current mix: the one-time crash notice, the orb with
+ * its critter scene, the title and status line, and the mix card. The phone
+ * column stacks this above [CatalogContent]; the wide layout gives it a pane.
+ */
+@Composable
+private fun ColumnScope.PlaybackContent(
+    state: PlaybackState,
+    ui: HomeUiState,
+    actions: HomeActions,
+    palette: State<MixPalette>,
+    onPlaybackRequested: () -> Unit,
+) {
+    val context = LocalContext.current
+    val mix = state.mix
+    Spacer(Modifier.height(HushSpacing.md))
+
+    // Sits above the orb rather than over it: the app still works, and the
+    // user came here to start a sound.
+    AnimatedVisibility(
+        visible = ui.crashNoticeVisible,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+    ) {
+        Column {
+            CrashNoticeCard(
+                onShare = {
+                    ui.crashReport?.let { shareCrashReport(context, it) }
+                    actions.onShareCrashReport()
+                },
+                onDismiss = actions::onDismissCrashReport,
+                modifier = Modifier.padding(horizontal = HushSpacing.screen),
+            )
+            Spacer(Modifier.height(HushSpacing.lg))
+        }
+    }
+
+    // The orb and its critter scene share one 200 dp box, so the layout is
+    // unchanged. The scene is a purely DECORATIVE sibling drawn ABOVE the orb
+    // (later in the Box) and placed right of centre at the orb's base: it
+    // shows on top of the play glyph yet — being a bare Canvas with no
+    // pointer modifier — never consumes touches, so the whole orb stays
+    // tappable under it.
+    Box(Modifier.align(Alignment.CenterHorizontally).size(HushSize.orb)) {
+        PlayOrb(
+            isPlaying = state.isPlaying,
+            enabled = !mix.isEmpty,
+            palette = palette,
+            contentDescription = stringResource(
+                if (state.isPlaying) R.string.cd_pause else R.string.cd_play,
+            ),
+            onClick = {
+                if (!state.isPlaying) onPlaybackRequested()
+                actions.onPlayPauseClick()
+            },
+        )
+        CritterScene(
+            kind = critterFor(mix),
+            isPlaying = state.isPlaying,
+            palette = palette,
+            // Lifted so the lowest art (cat cushion, frog puddle, firefly
+            // grass) clears the mix title below the orb; still right of
+            // centre and overlapping the orb.
+            size = 126.dp,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(x = 50.dp, y = (-8).dp),
+        )
+    }
+
+    // The orb's box already carries its halo's worth of margin.
+    Spacer(Modifier.height(HushSpacing.sm))
+    NowPlayingText(state = state)
+
+    Spacer(Modifier.height(HushSpacing.xl))
+    AnimatedVisibility(
+        visible = !mix.isEmpty,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut(),
+    ) {
+        Column {
+            MixCard(
+                layers = mix.layers,
+                actions = actions,
+                modifier = Modifier.padding(horizontal = HushSpacing.screen),
+            )
+            Spacer(Modifier.height(HushSpacing.xl))
+        }
+    }
+}
+
+/** The scenes row and the three catalog sections, [columns] tiles to a row. */
+@Composable
+private fun CatalogContent(
+    mix: Mix,
+    actions: HomeActions,
+    scenesScroll: ScrollState,
+    columns: Int = PHONE_COLUMNS,
+) {
+    SectionHeader(
+        title = stringResource(R.string.scenes_header),
+        modifier = Modifier.padding(horizontal = HushSpacing.screen),
+    )
+    Spacer(Modifier.height(HushSpacing.md))
+    SceneRow(activeSceneId = Scenes.matching(mix)?.id, actions = actions, scrollState = scenesScroll)
+
+    Spacer(Modifier.height(HushSpacing.xl))
+    SoundCategory.entries.forEach { category ->
+        SectionHeader(
+            title = category.title,
+            modifier = Modifier.padding(horizontal = HushSpacing.screen),
+        )
+        Spacer(Modifier.height(HushSpacing.md))
+        CatalogSection(
+            sounds = SoundId.inCategory(category),
+            mix = mix,
+            actions = actions,
+            modifier = Modifier.padding(horizontal = HushSpacing.screen),
+            columns = columns,
+        )
+        Spacer(Modifier.height(HushSpacing.xl))
+    }
+    Spacer(Modifier.height(HushSpacing.sm))
 }
 
 @Composable
@@ -441,11 +535,11 @@ private fun NowPlayingText(state: PlaybackState) {
 }
 
 @Composable
-private fun SceneRow(activeSceneId: String?, actions: HomeActions) {
+private fun SceneRow(activeSceneId: String?, actions: HomeActions, scrollState: ScrollState) {
     Row(
         Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(scrollState)
             .padding(horizontal = HushSpacing.screen),
         horizontalArrangement = Arrangement.spacedBy(HushSpacing.sm),
     ) {

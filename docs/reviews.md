@@ -202,3 +202,28 @@ animated "critter scenes" companion into the shipped app.
 | 5 | Nit | Kover-exclusion comment for `ui.critterscenes` said "never referenced by the shipped app", untrue once wired into HomeScreen. | **Fixed** — comment corrected (drawing-only Compose, verified by the screenshot harness). |
 
 Correctness/layout otherwise clean (exhaustive `when(kind)`, safe `variant` default, no NaN/div-by-zero, 320 dp fine). Merged to main as 0.1.6; the parallel-install identity (`.scenes` / "Hush Scenes") was reverted for the real release.
+
+## 2026-09-16 — Codex review of the wide-screen layout (0.2.0)
+
+Review of the uncommitted two-pane layout (`HomeLayout`, the split
+`HomeScreen`, `CatalogSection(columns)`, the removed portrait lock, four wide
+screenshot references) against `specs/ui.md`, **Layout**.
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| 1 | High | Sheet bodies never scrolled (`HushBottomSheet` was a plain `Column`); the timer sheet is taller than a landscape phone's 360 dp window, so its lower controls were unreachable — masked until now by the portrait lock. | **Fixed** — the sheet body scrolls. Verified on the emulator at 914 × 411 dp: one swipe reaches "Start timer". |
+| 2 | Medium | The three-column floor contradicts the 104 dp tile minimum between 600 and 651 dp, and the column breakpoints are really 838 / 1034 / 1154 dp, not the "from 840" the spec said. | **Fixed in the docs** — the floor is intentional (a 600 dp catalog pane *is* a 320 dp phone, tiles as narrow as 87 dp); spec, KDoc and tests now carry the exact numbers, including 652 dp where tiles reach 104. |
+| 3 | Medium | `rememberScrollState()` inside the `when` branches lost every scroll position on a resize or fold across 600 dp. | **Fixed** — the compact, playback, catalog and scenes scroll states are hoisted above the split. |
+| 4 | Medium | With the lock gone, a landscape phone's side navigation bar or cutout overlapped the body: only the status bar (header) and the bottom navigation bar (volume bar) were padded. | **Fixed** — horizontal `safeDrawing` insets come off the usable width before the split is decided and are padded once around the shared column (`windowInsetsPadding` consumes them, so the bar's bottom padding is unchanged); the aurora stays edge-to-edge. Verified on the rotated emulator with its cutout. |
+| 5 | Medium | A width-only split cannot avoid an occluding hinge (Surface Duo class); a flat foldable is fine. | **Accepted** — spec records it as a non-target. |
+| 6 | Low | `HomeLayoutTest` skipped the 600–651 dp range and the exact breakpoints, and did not prove the grid is packed as tightly as the tile minimum allows. | **Fixed** — tests for 651/652, 837/838, 1033/1034, 1153/1154, the pane-clamp edges 667/668 and 1046/1047, and a maximal-packing property over 652–2400 dp. |
+
+All-clear per Codex: `BoxWithConstraints` at the root is fine for this split
+(reacts to real constraints on rotation and multi-window; a posture library is
+not needed for it), `Arrangement.Center` on the scrollable playback pane is
+correct, the extraction leaves the phone column byte-identical (all 25 phone
+references still validate), no extra manifest flags are needed for targetSdk 36.
+Also exercised on the emulator by overriding the logical display: 1280 × 800
+and 800 × 1280 dp (10"), 1024 × 600 and 600 × 1024 dp (7"), plus a real
+rotation with playback running — no crash, service and wake lock intact.
+

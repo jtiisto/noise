@@ -50,11 +50,12 @@ import dev.tapio.hush.ui.theme.TileShape
 import dev.tapio.hush.ui.theme.accentFor
 import kotlin.math.ceil
 
-private const val COLUMNS = 3
+/** Tiles to a row on a phone; the wide layout passes more (see [HomeLayout]). */
+internal const val PHONE_COLUMNS = 3
 private const val VOLUME_DOTS = 3
 
 /**
- * One catalog section as a fixed 3-column grid.
+ * One catalog section as a grid of [columns] tiles to a row.
  *
  * A plain `Column` of `Row`s rather than a `LazyVerticalGrid`: the catalog is
  * 16 tiles that never change, and a lazy grid inside the page's single
@@ -67,12 +68,13 @@ fun CatalogSection(
     mix: Mix,
     actions: HomeActions,
     modifier: Modifier = Modifier,
+    columns: Int = PHONE_COLUMNS,
 ) {
     Column(
         modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(HushSpacing.gutter),
     ) {
-        sounds.chunked(COLUMNS).forEach { row ->
+        sounds.chunked(columns).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(HushSpacing.gutter)) {
                 row.forEach { id ->
                     SoundTile(
@@ -84,7 +86,7 @@ fun CatalogSection(
                     )
                 }
                 // Keep the last row's tiles the same width as every other row.
-                repeat(COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

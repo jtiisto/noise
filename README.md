@@ -29,6 +29,9 @@ network.
   pause when headphones unplug), and resume after the process is killed.
 - **A night-sky UI** that tints itself with the sounds in the mix, with one
   quiet breathing animation on the play orb.
+- **Phones, tablets and foldables** — from 600 dp the playback controls and
+  the catalog sit side by side, in either orientation; phones keep the
+  single column.
 - **A companion animal** rests at the base of the orb and changes with the mix
   — a frog for rain, a whale for the ocean, a firefly for crickets, a fox by
   the campfire, and a sleeping cat when all is quiet.

@@ -93,15 +93,25 @@ only maps its answer to a tree):
   phones in landscape (a 780 × 360 phone is wide). The header and the pinned
   master-volume bar stay full-width and unchanged; the body between them
   splits into two panes that scroll independently:
-  - **Playback pane** (left, 44 % of the width, clamped 300–440 dp): the
+  - **Playback pane** (left, 42 % of the width, clamped 280–440 dp): the
     crash notice, the orb with its critter scene, the mix title and status
     line, and the mix card.
   - **Catalog pane** (right, the rest): the scenes row and the three catalog
     sections. Tiles keep their 104 dp height; a section shows as many columns
-    as fit at 104–140 dp per tile, clamped to 3–6 (4 on a 7" portrait
-    tablet, 6 on a 10" landscape one).
+    as fit at 104 dp or more per tile, clamped to 3–6: three at 600 dp (the
+    catalog pane is then exactly a 320 dp phone, and tiles reach 104 dp at
+    652 dp), four from 838 dp, five from 1034 dp, six from 1154 dp — so a
+    10" tablet shows three columns upright and six on its side.
   The snackbar centres over the body as before; modal sheets keep Material's
-  640 dp maximum width and centre on wide screens.
+  640 dp maximum width and centre on wide screens, and their bodies scroll,
+  so a short landscape window still reaches every control.
+- Side insets (a landscape phone's navigation bar, a cutout) come off the
+  usable width before the split is decided and are padded once around the
+  shared column; the aurora stays edge-to-edge behind. Scroll positions are
+  hoisted above the split, so a fold or a resize across 600 dp keeps the
+  page where it was.
+- The split is width-only. A device with an occluding hinge (Surface Duo
+  class) gets no hinge avoidance — accepted, not a target.
 - There is no orientation lock. Phones follow the sensor like tablets do;
   Android 16 ignores the lock on 600 dp screens regardless, so the wide
   layout is what makes rotation safe, not a manifest flag.

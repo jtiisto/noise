@@ -1,6 +1,8 @@
 package dev.tapio.hush.ui.components
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
@@ -40,8 +42,12 @@ fun HushBottomSheet(
         scrimColor = HushColor.Scrim,
         dragHandle = { BottomSheetDefaults.DragHandle(color = HushColor.HairlineStrong) },
     ) {
+        // The body scrolls: a landscape phone's 360 dp window is shorter than
+        // the timer sheet, and without this the bottom controls were simply
+        // out of reach (the portrait lock used to hide that).
         Column(
             Modifier
+                .verticalScroll(rememberScrollState())
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(horizontal = HushSpacing.screen)
                 .padding(bottom = HushSpacing.xl, top = HushSpacing.sm),
