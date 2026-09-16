@@ -40,6 +40,9 @@ noise/
   - `./gradlew testDebugUnitTest` — unit suite (pre-commit when code is staged)
   - `./gradlew testDebugUnitTest koverVerifyAggregated` — coverage gate (pre-push)
   - `./gradlew validateDebugScreenshotTest` — screenshot references (pre-push)
+  - `./gradlew :app:lintVitalRelease` — release-only lint (pre-push); the debug
+    build never runs it and the release build fails on it, so run it here after
+    any manifest/resource change
   - `./gradlew updateDebugScreenshotTest` — regenerate references after an intended UI change
   - `NOISE_RENDER_DIR=/path ./gradlew :core:audio:testDebugUnitTest --tests '*RenderSamples*'`
     — 20 s WAV of every sound for listening / spectral checks (run in a scratch

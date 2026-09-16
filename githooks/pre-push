@@ -3,6 +3,8 @@
 #
 #   * code changes   -> ./gradlew testDebugUnitTest koverVerifyAggregated
 #                       ./gradlew validateDebugScreenshotTest
+#                       ./gradlew :app:lintVitalRelease   (release-only lint —
+#                       the debug build never runs it, the release build fails on it)
 #   * docs-only push -> skip (every changed file is *.md, specs/, or docs/)
 #   * no-op push     -> skip (empty net diff vs the remote)
 #
@@ -96,6 +98,12 @@ echo "pre-push: running full unit suite with coverage gate..."
 echo "pre-push: validating screenshot references..."
 ./gradlew validateDebugScreenshotTest || {
     echo "pre-push: SCREENSHOT VALIDATION FAILED — push aborted." >&2
+    exit 1
+}
+
+echo "pre-push: running release-only lint (lintVitalRelease)..."
+./gradlew :app:lintVitalRelease || {
+    echo "pre-push: RELEASE LINT FAILED — push aborted." >&2
     exit 1
 }
 
