@@ -4,11 +4,18 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Crescent: full disc minus an offset disc, drawn with even-odd fill. -->
+    <!--
+      Crescent: a 19-radius disc at (54,49) minus a 14-radius disc at (59,49),
+      each drawn as two half-turn arcs, with even-odd fill. (The earlier
+      single path asked for a 15-radius arc across a 38-unit chord, which the
+      SVG rule inflates to 19, so both arcs traced the same semicircle and the
+      moon rendered as a hairline.) The small disc stays inside the big one,
+      so the horns meet at the right edge.
+    -->
     <path
         android:fillColor="#ECEBF5"
         android:fillType="evenOdd"
-        android:pathData="M54,30 a19,19 0 1,0 0,38 a15,15 0 1,1 0,-38 z" />
+        android:pathData="M35,49 a19,19 0 1,0 38,0 a19,19 0 1,0 -38,0 z M45,49 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0 z" />
     <!-- Three wave lines, thinning downwards. -->
     <path
         android:strokeColor="#7FA6FF"

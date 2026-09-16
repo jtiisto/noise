@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Auto Backup scope on API 26–30 (API 31+ reads data_extraction_rules.xml).
+  The DataStore file carries the mix, volumes, settings and last timer choice
+  and is worth keeping across devices; a crash trace from one device says
+  nothing about the next, so it stays behind. See specs/persistence.md.
+-->
+<full-backup-content>
+    <include domain="file" path="datastore/" />
+    <exclude domain="file" path="crash/" />
+</full-backup-content>

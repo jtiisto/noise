@@ -37,3 +37,14 @@ app start where nothing could handle the failure. Specifically:
 - A corrupt DataStore file is replaced with an empty one
   (`ReplaceFileCorruptionHandler`): losing the last mix beats failing to
   start.
+
+## Backup
+`android:allowBackup` stays on, scoped by `res/xml/backup_rules.xml` (API
+26–30) and `res/xml/data_extraction_rules.xml` (API 31+, cloud backup and
+device-to-device transfer alike): the DataStore file
+`datastore/hush.preferences_pb` — mix, volumes, settings, last timer choice —
+is included; the crash-report directory `crash/` is excluded, because a trace
+from one device says nothing about the next and should not follow the user
+into a fresh install. A restored timer end time that already passed simply
+does not resume (see **Resume**).
+
