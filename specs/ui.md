@@ -82,6 +82,30 @@
    scrim that fades from transparent into the night ground so the catalog can
    scroll under it and stay legible (there is no blur available).
 
+### Layout — window widths
+Home has exactly two layouts, chosen by the window's width class and nothing
+else (a pure `HomeLayout.from(widthDp)` decides, unit-tested; the composable
+only maps its answer to a tree):
+- **Compact (< 600 dp)** — the single scrolling column above. This is every
+  phone in portrait, and it is byte-identical to the shipped layout: the
+  phone screenshot references are the regression gate for it.
+- **Wide (≥ 600 dp)** — tablets in either orientation, unfolded foldables and
+  phones in landscape (a 780 × 360 phone is wide). The header and the pinned
+  master-volume bar stay full-width and unchanged; the body between them
+  splits into two panes that scroll independently:
+  - **Playback pane** (left, 44 % of the width, clamped 300–440 dp): the
+    crash notice, the orb with its critter scene, the mix title and status
+    line, and the mix card.
+  - **Catalog pane** (right, the rest): the scenes row and the three catalog
+    sections. Tiles keep their 104 dp height; a section shows as many columns
+    as fit at 104–140 dp per tile, clamped to 3–6 (4 on a 7" portrait
+    tablet, 6 on a 10" landscape one).
+  The snackbar centres over the body as before; modal sheets keep Material's
+  640 dp maximum width and centre on wide screens.
+- There is no orientation lock. Phones follow the sensor like tablets do;
+  Android 16 ignores the lock on 600 dp screens regardless, so the wide
+  layout is what makes rotation safe, not a manifest flag.
+
 ### Critter (Home overlay)
 A small, cute animal keeps the orb company — a personal, delightful touch, not
 a control.
@@ -223,7 +247,8 @@ form a single list, bracketed by two full-width rows:
 ## Behaviour
 - First tap on play (or timer start) on API 33+ requests `POST_NOTIFICATIONS`
   with a short rationale snackbar if denied; playback proceeds regardless.
-- Edge-to-edge, transparent system bars, dark icons off. Portrait-locked.
+- Edge-to-edge, transparent system bars, dark icons off. No orientation
+  lock (see **Layout**).
 - Accessibility: every control has a content description; sliders expose
   `ProgressBarRangeInfo`, a percentage (or a duration, for the custom timer
   length) as their state description and a `setProgress` action; tiles
@@ -276,7 +301,11 @@ slider open, settings sheet, catalog long-press sheet in the mix, the crash
 notice above a paused single-layer mix, and
 — at 320 × 640, to prove the smallest supported screen — the playing home
 screen, the long-press sheet for a sound the full mix has no room for, and
-one catalog section (the three-column grid with the longest labels in it).
+one catalog section (the three-column grid with the longest labels in it);
+and, for the wide layout — a 10" tablet in landscape (1280 × 800) with the
+playing trio, a tablet in portrait (800 × 1280) playing until cancelled, a
+phone in landscape (780 × 360) with the trio, and the smallest wide window
+(600 × 960) with an empty mix.
 Reference PNGs are committed under `app/src/screenshotTestDebug/reference/`;
 `validateDebugScreenshotTest` runs in the pre-push hook.
 

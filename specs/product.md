@@ -3,14 +3,19 @@
 ## Goal
 A calm, attractive Android sleep-sound app that plays layered noise and
 procedurally synthesized ambience (rain, ocean, wind, fire…) reliably all night
-on modest hardware. Personal, side-loaded app — no Play Store, no accounts, no
-network, no analytics.
+on modest hardware. Side-loaded today, with a Google Play listing planned
+(`docs/release.md` holds the parked runbook) — no accounts, no network, no
+analytics.
 
-App name: **Hush**. Package: `dev.jtiisto.noise`. Repo/Gradle root: `noise`.
+App name: **Hush**. Application ID and base package: `dev.tapio.hush`.
+Repo/Gradle root: `noise` (the working title; the ID is what ships).
 
 ## Target hardware
 Mid/low-end phones, not flagship Pixels. Consequences that are NOT optional:
 - minSdk 26 (Android 8.0). targetSdk 36, compileSdk 37.
+- Phones first, but tablets, foldables and landscape are real: Android 16
+  ignores orientation locks on screens 600 dp and wider, so every width has
+  a layout (see `specs/ui.md`, **Layout**). Phone layouts stay unchanged.
 - Audio is synthesized in pure Kotlin on one thread with no allocation in the
   render loop; a 3-layer mix must stay well under 5 % of one core.
 - UI animations are few, cheap and GPU-friendly (gradients, scale/alpha
@@ -49,12 +54,13 @@ Up to **3 sounds** play at once, each with its own volume. Curated **scenes**
    wall-clock end time).
 7. **Attractive UI** — see `specs/ui.md`. Dark, night-first design that tints
    itself with the sounds in the mix.
+8. **Large screens** — one adaptive layout for widths of 600 dp and more
+   (tablets in either orientation, unfolded foldables, landscape phones): the
+   playback pane and the catalog pane side by side. Nothing else changes.
 
 ## Explicit non-goals (v1)
 - Real recordings (may come later through the same engine as a sample source).
 - Alarm/wake-up, binaural beats, guided meditation, cloud sync, widgets.
-- Tablet-specific layouts (portrait phone layout must still be usable on
-  tablets).
 
 ## Quality bar
 - Unit tests for every non-glue class; Kover aggregated line coverage gate in
