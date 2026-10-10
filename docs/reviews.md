@@ -314,3 +314,12 @@ double fade), `tick()` unreachable while frozen, fade-setting changes while
 frozen, `playUntilCancelled()` on a frozen timer, persistence compatibility
 (old data reads as not frozen; end time wins over a frozen remaining).
 
+## 2026-10-10 — Field bug #4: the media card said "null" with no timer (fixed in 0.2.4)
+
+Seen on the Pixel the moment the real media card appeared (0.2.3): with no
+sleep timer the second line read "null". `HushPlayer` left the artist null when
+there was no timer; the notification itself carries a true null (invisible in
+`dumpsys`), but the system's media card renders the session's missing artist as
+the literal text. **Fix:** the subtitle is never empty — "No sleep timer" in the
+pill's wording. Verified on the emulator in all three states.
+

@@ -103,8 +103,13 @@ internal class HushPlayer(
             .build()
     }
 
-    private fun subtitle(playback: PlaybackState): String? {
-        val timer = playback.timer ?: return null
+    /**
+     * Never null: the system's media card renders a missing artist as the
+     * literal text "null" (field bug #4, 2026-10-10), so the no-timer case
+     * says so in words, in the pill's wording.
+     */
+    private fun subtitle(playback: PlaybackState): String {
+        val timer = playback.timer ?: return "No sleep timer"
         val minutes = remainingMinutes(timer.remainingMillis)
         return if (timer.isPaused) "Sleep timer paused · $minutes min" else "Sleep timer · $minutes min"
     }

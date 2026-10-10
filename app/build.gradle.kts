@@ -19,8 +19,8 @@ android {
 
     defaultConfig {
         applicationId = "dev.tapio.hush"
-        versionCode = 13
-        versionName = "0.2.3"
+        versionCode = 14
+        versionName = "0.2.4"
     }
 
     signingConfigs {

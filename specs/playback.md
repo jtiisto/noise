@@ -138,8 +138,11 @@ interface PlaybackController {
     `play()` resumes it.
 - `HushPlaybackService : MediaSessionService` — builds a `MediaSession`
   around `HushPlayer : SimpleBasePlayer`, which mirrors controller state:
-  one `MediaItem` whose metadata is the mix title (`Mix.title()`) and subtitle
-  "Sleep timer · 27 min" when a timer runs (updated once a minute — the
+  one `MediaItem` whose metadata is the mix title (`Mix.title()`) and a
+  subtitle that is never empty — "Sleep timer · 27 min" while a timer runs,
+  "Sleep timer paused · 27 min" while frozen, "No sleep timer" otherwise (the
+  system's media card prints a missing artist as the text "null"; updated
+  once a minute — the
   service refreshes the session only when the play state, the title or the
   whole minutes left change, not on every one-second tick). Available
   commands: PLAY_PAUSE, STOP, plus the read-only GET_CURRENT_MEDIA_ITEM /
