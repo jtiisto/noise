@@ -268,3 +268,49 @@ in `onCreate`. Verified on the emulator: the notification follows Cabin → Deep
 focus → Seaside, updates on pause/play, the service stays foreground while
 playing, the 60 s idle exit still removes it.
 
+## 2026-10-10 — Field bug #3: a title-only notification with no timer line (fixed in 0.2.3)
+
+Reported together with #2's fix: no "Sleep timer · N min" line in the
+notification. Instrumenting showed the player's metadata carrying the artist
+when Media3 asked for the update, yet the notification on screen had no text and
+**no style template** — it was the bootstrap placeholder from
+`promoteToForeground()`, not Media3's. Media3 promotes to the foreground by
+first starting the service with a self-intent and only then posting its rich
+notification; the self-intent lands in `onStartCommand` *after* that, and the
+unconditional placeholder there overwrote the rich notification (same id) on
+every single update. So the Pixel showed a plain title-only row the whole time —
+no media style, no controls, no timer line. **Fix:** the service overrides
+every start command now promotes with the notification already posted under
+our id (Media3's rich one once it exists) and falls back to the placeholder
+only before Media3's controller has connected — so content never regresses and
+every start's foreground obligation is still met (a first version used a
+"Media3 owns it" flag; Codex pointed out a flag proves no promotion). Verified
+on the emulator: `MediaStyle` template, the timer line, title following scene
+switches.
+
+## 2026-10-10 — Pause freezes the sleep timer (product change, 0.2.3)
+
+Pause used to cancel a running timer on purpose. There is no stop button, so
+pause is the only way to interrupt a night, and resetting the timer on every
+interruption read as a bug. Now a user pause freezes the timer where it stands
+(remaining time held, nothing ticking) and play resumes it for that time; the
+sheet's Start always restarts in full, even for the same length; emptying the
+mix still cancels; forced pauses (focus loss, unplug) still leave the wall-clock
+timer running. Persisted as `timer_paused_remaining_ms`; restore brings a
+frozen timer back frozen. Spec: `specs/playback.md`, `specs/persistence.md`,
+`specs/product.md`.
+
+## 2026-10-10 — Codex review of the notification fix and the timer freeze
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| 1 | High → low | A "Media3 owns the notification" flag set from `onUpdateNotification` proves a request, not a promotion; a start arriving while Media3 has posted but not promoted would skip the placeholder and leave its foreground obligation unmet. The specific race needs Media3 to post before the first `onStartCommand`, which the lifecycle prevents. | **Fixed anyway, better** — no flag: every start promotes with the live notification (Media3's) or the placeholder. |
+| 2 | Medium | `HushPlayer.handleRelease()` called `pause()` unconditionally; with pause now freezing, the 60 s idle teardown after a *forced* pause froze a wall-clock timer and dropped `resumeOnGain` (a long phone call would never resume). | **Fixed** — release pauses only if still playing. |
+| 3 | Low | A frozen timer had no distinct presentation; freezing without a minute change would not refresh the notification. | **Fixed** — pill description and notification subtitle say "paused"; `isPaused` joined the refresh key. |
+| 4 | Low | Spec said restore never arms a frozen timer, but frozen + `wasPlaying=true` (not producible by `snapshot()`) would resume and re-arm. | **Fixed** — a frozen timer wins over `wasPlaying`; precedence documented. |
+
+Cleared by Codex: fade generations and `fadeStarted` across freeze/resume (no
+double fade), `tick()` unreachable while frozen, fade-setting changes while
+frozen, `playUntilCancelled()` on a frozen timer, persistence compatibility
+(old data reads as not frozen; end time wins over a frozen remaining).
+

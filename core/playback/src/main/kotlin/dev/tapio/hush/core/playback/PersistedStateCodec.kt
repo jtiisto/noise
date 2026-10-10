@@ -33,6 +33,7 @@ object PersistedStateCodec {
     val WAS_PLAYING: Preferences.Key<Boolean> = booleanPreferencesKey("was_playing")
     val TIMER_END_AT: Preferences.Key<Long> = longPreferencesKey("timer_end_at")
     val TIMER_TOTAL_MS: Preferences.Key<Long> = longPreferencesKey("timer_total_ms")
+    val TIMER_PAUSED_REMAINING_MS: Preferences.Key<Long> = longPreferencesKey("timer_paused_remaining_ms")
 
     private const val LAYER_SEPARATOR = ","
     private const val FIELD_SEPARATOR = ":"
@@ -62,6 +63,8 @@ object PersistedStateCodec {
             ?: defaults.timerEndAtEpochMillis,
         timerTotalMillis = preferences.readOrNull(TIMER_TOTAL_MS)?.coerceAtLeast(0L)
             ?: defaults.timerTotalMillis,
+        timerPausedRemainingMillis = preferences.readOrNull(TIMER_PAUSED_REMAINING_MS)?.coerceAtLeast(0L)
+            ?: defaults.timerPausedRemainingMillis,
     )
 
     /**
@@ -81,6 +84,7 @@ object PersistedStateCodec {
         into[WAS_PLAYING] = state.wasPlaying
         into[TIMER_END_AT] = state.timerEndAtEpochMillis
         into[TIMER_TOTAL_MS] = state.timerTotalMillis
+        into[TIMER_PAUSED_REMAINING_MS] = state.timerPausedRemainingMillis
     }
 
     /** `"rain:0.700,brown:0.400"` — layer order is display order and must round-trip. */

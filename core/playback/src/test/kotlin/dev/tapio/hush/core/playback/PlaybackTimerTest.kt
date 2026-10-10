@@ -252,17 +252,6 @@ class PlaybackTimerTest {
     }
 
     @Test
-    fun `a manual pause cancels the timer`() = playbackTest { f ->
-        f.controller.toggleSound(SoundId.RAIN)
-        f.controller.startTimer(30)
-
-        f.controller.pause()
-
-        assertNull(f.state.timer)
-        assertFalse(f.state.isPlaying)
-    }
-
-    @Test
     fun `a timer that runs out while paused still completes`() = playbackTest { f ->
         f.controller.toggleSound(SoundId.RAIN)
         f.controller.startTimer(5)
@@ -275,4 +264,96 @@ class PlaybackTimerTest {
         assertNull(f.state.timer)
         assertEquals(0, f.engine.fadeStartCount) // nothing was playing to fade
     }
+
+    // ------------------------------------------------------------ pause freezes
+
+    @Test
+    fun `a user pause freezes the timer where it stands`() = playbackTest { f ->
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(30)
+        advanceThrough(10 * minute)
+
+        f.controller.pause()
+
+        val frozen = checkNotNull(f.state.timer)
+        assertTrue(frozen.isPaused)
+        assertFalse(f.state.isPlaying)
+        assertEquals(20 * minute, frozen.remainingMillis)
+        assertEquals(0L, frozen.endAtEpochMillis)
+        assertEquals(30 * minute, frozen.totalMillis)
+        advanceThrough(15 * minute) // the clock runs on; the frozen timer does not
+        assertEquals(frozen, f.state.timer)
+    }
+
+    @Test
+    fun `play resumes a frozen timer for exactly the time it had left`() = playbackTest { f ->
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(30)
+        advanceThrough(10 * minute)
+        f.controller.pause()
+        advanceThrough(5 * minute)
+
+        f.controller.play()
+
+        val timer = checkNotNull(f.state.timer)
+        assertFalse(timer.isPaused)
+        assertTrue(f.state.isPlaying)
+        assertEquals(20 * minute, timer.remainingMillis)
+        assertEquals(VirtualClock.EPOCH_START + 15 * minute + 20 * minute, timer.endAtEpochMillis)
+        advanceThrough(20 * minute - 45_000L) // into the fade window
+        assertEquals(1, f.engine.fadeStartCount)
+        f.engine.completeFade()
+        assertFalse(f.state.isPlaying)
+        assertNull(f.state.timer)
+    }
+
+    @Test
+    fun `pausing inside the fade window cancels the fade and resuming fades from the start`() = playbackTest { f ->
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(5)
+        advanceThrough(5 * minute - 30_000L)
+        assertEquals(1, f.engine.fadeStartCount)
+
+        f.controller.pause()
+        assertEquals(1, f.engine.cancelFadeCount)
+        assertEquals(30_000L, checkNotNull(f.state.timer).remainingMillis)
+
+        f.controller.play()
+        assertEquals(2, f.engine.fadeStartCount)
+        f.engine.completeFade()
+        assertNull(f.state.timer)
+        assertFalse(f.state.isPlaying)
+    }
+
+    @Test
+    fun `startTimer replaces a frozen timer and cancelTimer clears it`() = playbackTest { f ->
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(30)
+        advanceThrough(minute)
+        f.controller.pause()
+
+        f.controller.startTimer(30) // the same length again still restarts in full
+        val timer = checkNotNull(f.state.timer)
+        assertFalse(timer.isPaused)
+        assertEquals(30 * minute, timer.remainingMillis)
+        assertTrue(f.state.isPlaying)
+
+        f.controller.pause()
+        f.controller.cancelTimer()
+        assertNull(f.state.timer)
+    }
+
+    @Test
+    fun `emptying the mix cancels the timer rather than freezing it`() = playbackTest { f ->
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(30)
+        f.controller.clearMix()
+        assertNull(f.state.timer)
+
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(30)
+        f.controller.toggleSound(SoundId.RAIN) // removes the last layer
+        assertNull(f.state.timer)
+    }
 }
+

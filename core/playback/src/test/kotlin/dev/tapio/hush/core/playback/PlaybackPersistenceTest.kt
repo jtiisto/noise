@@ -165,4 +165,54 @@ class PlaybackPersistenceTest {
         assertEquals(0L, saved.timerEndAtEpochMillis)
         assertEquals(listOf(SoundId.OCEAN), saved.mix.ids)
     }
+
+    @Test
+    fun `pausing with a timer writes its frozen remaining time and no end time`() = playbackTest { f ->
+        f.controller.setMix(Mix.of(SoundId.RAIN to 0.5f))
+        f.controller.startTimer(30)
+        advanceThrough(10 * 60_000L)
+
+        f.controller.pause()
+
+        val saved = checkNotNull(f.store.last)
+        assertEquals(0L, saved.timerEndAtEpochMillis)
+        assertEquals(30 * 60_000L, saved.timerTotalMillis)
+        assertEquals(20 * 60_000L, saved.timerPausedRemainingMillis)
+    }
+
+    @Test
+    fun `a frozen timer restores frozen and the next play resumes it`() = playbackTest(
+        persisted = PersistedState(
+            mix = Mix.of(SoundId.RAIN to 0.5f),
+            timerTotalMillis = 30 * 60_000L,
+            timerPausedRemainingMillis = 20 * 60_000L,
+        ),
+    ) { f ->
+        val frozen = checkNotNull(f.state.timer)
+        assertTrue(frozen.isPaused)
+        assertEquals(20 * 60_000L, frozen.remainingMillis)
+        assertFalse(f.state.isPlaying)
+        assertEquals(0, f.engine.startCount)
+
+        f.controller.play()
+
+        val timer = checkNotNull(f.state.timer)
+        assertFalse(timer.isPaused)
+        assertEquals(VirtualClock.EPOCH_START + 20 * 60_000L, timer.endAtEpochMillis)
+    }
+
+    @Test
+    fun `a frozen timer wins over a stale wasPlaying on restore`() = playbackTest(
+        persisted = PersistedState(
+            mix = Mix.of(SoundId.RAIN to 0.5f),
+            wasPlaying = true, // not producible by snapshot(); the frozen timer is the truth
+            timerTotalMillis = 30 * 60_000L,
+            timerPausedRemainingMillis = 20 * 60_000L,
+        ),
+    ) { f ->
+        assertFalse(f.state.isPlaying)
+        assertEquals(0, f.engine.startCount)
+        assertTrue(checkNotNull(f.state.timer).isPaused)
+    }
 }
+

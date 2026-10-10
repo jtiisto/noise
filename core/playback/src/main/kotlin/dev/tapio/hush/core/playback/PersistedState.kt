@@ -18,6 +18,11 @@ data class PersistedState(
     val timerEndAtEpochMillis: Long = 0L,
     /** Total length of the running timer, for progress; 0 = no timer. */
     val timerTotalMillis: Long = 0L,
+    /**
+     * Remaining time of a timer frozen by a user pause; 0 = not frozen. A
+     * frozen timer has no end time: it waits for the next play.
+     */
+    val timerPausedRemainingMillis: Long = 0L,
 ) {
     companion object {
         const val DEFAULT_MASTER_VOLUME = 0.8f

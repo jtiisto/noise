@@ -80,7 +80,12 @@ internal class HushPlayer(
     override fun handlePrepare(): ListenableFuture<*> = Futures.immediateVoidFuture()
 
     override fun handleRelease(): ListenableFuture<*> {
-        controller.pause()
+        // The usual release is the idle stop, 60 s into a pause — then there
+        // is nothing to do, and a pause() here would turn a forced pause
+        // (focus loss) into a user pause: it would freeze a wall-clock timer
+        // and drop resumeOnGain (Codex review, 2026-10-10). Only a service
+        // torn down mid-playback has to stop the sound.
+        if (controller.state.value.isPlaying) controller.pause()
         return Futures.immediateVoidFuture()
     }
 
@@ -100,7 +105,8 @@ internal class HushPlayer(
 
     private fun subtitle(playback: PlaybackState): String? {
         val timer = playback.timer ?: return null
-        return "Sleep timer · ${remainingMinutes(timer.remainingMillis)} min"
+        val minutes = remainingMinutes(timer.remainingMillis)
+        return if (timer.isPaused) "Sleep timer paused · $minutes min" else "Sleep timer · $minutes min"
     }
 
     companion object {

@@ -105,9 +105,10 @@ class DefaultPlaybackControllerTest {
 
         f.controller.updateSettings { it.copy(mixWithOtherApps = false) }
 
-        // Same rule as play(): no focus, no sound.
+        // Same rule as play(): no focus, no sound. It is a user-path pause,
+        // so the timer freezes and waits for the next play.
         assertFalse(f.state.isPlaying)
-        assertNull(f.state.timer)
+        assertTrue(checkNotNull(f.state.timer).isPaused)
         assertEquals(1, f.engine.stopCount)
         val saved = checkNotNull(f.store.last)
         assertFalse(saved.wasPlaying)

@@ -1,5 +1,6 @@
 package dev.tapio.hush.core.playback.service
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -87,11 +88,17 @@ class HushPlaybackService : MediaSessionService() {
         // player-state listener has run, and on the very first play the
         // POST_NOTIFICATIONS dialog delays that past the deadline — the system
         // then kills the process with ForegroundServiceDidNotStartInTime.
-        // Promote immediately with a placeholder on the same channel and id
-        // Media3 uses; Media3's notification manager (attached by addSession in
-        // onCreate) replaces it in place as soon as its controller connects.
-        // Never let this throw: a background-start refusal is handled by
-        // falling back to Media3's own lifecycle.
+        // Promote immediately, and with whatever notification is already on
+        // screen: Media3 promotes by first starting this service with a
+        // self-intent and only then posting its rich notification, so the
+        // self-intent lands here *after* that, and a placeholder here used to
+        // overwrite the rich notification every time (same id) — a title-only
+        // row with no timer line, no media style and no controls (field bug
+        // #3, 2026-10-10). Re-posting the live notification keeps the content
+        // and still satisfies every start's foreground obligation; the
+        // placeholder is only for the very first start, before Media3's
+        // controller has connected. Never let this throw: a background-start
+        // refusal is handled by falling back to Media3's own lifecycle.
         promoteToForeground()
         super.onStartCommand(intent, flags, startId)
         // START_STICKY so a process killed mid-playback is recreated; the
@@ -100,22 +107,7 @@ class HushPlaybackService : MediaSessionService() {
     }
 
     private fun promoteToForeground() {
-        val launch = packageManager.getLaunchIntentForPackage(packageName)
-        val contentIntent = launch?.let {
-            PendingIntent.getActivity(
-                this,
-                0,
-                it,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-        }
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentTitle(controller.state.value.mix.title(getString(R.string.hush_playback_channel_name)))
-            .setContentIntent(contentIntent)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .build()
+        val notification = currentNotification() ?: placeholderNotification()
         try {
             ServiceCompat.startForeground(
                 this,
@@ -133,6 +125,32 @@ class HushPlaybackService : MediaSessionService() {
             // start call, and playback continues in-process regardless.
             android.util.Log.w("HushPlaybackService", "could not enter foreground", e)
         }
+    }
+
+    /** The notification currently posted under our id — Media3's, once it has one. */
+    private fun currentNotification(): Notification? =
+        getSystemService(NotificationManager::class.java)
+            ?.activeNotifications
+            ?.firstOrNull { it.id == NOTIFICATION_ID }
+            ?.notification
+
+    private fun placeholderNotification(): Notification {
+        val launch = packageManager.getLaunchIntentForPackage(packageName)
+        val contentIntent = launch?.let {
+            PendingIntent.getActivity(
+                this,
+                0,
+                it,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        }
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setContentTitle(controller.state.value.mix.title(getString(R.string.hush_playback_channel_name)))
+            .setContentIntent(contentIntent)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -167,6 +185,7 @@ class HushPlaybackService : MediaSessionService() {
                         isPlaying = state.isPlaying,
                         title = state.mix.title(),
                         timerMinutes = state.timer?.let { HushPlayer.remainingMinutes(it.remainingMillis) },
+                        timerPaused = state.timer?.isPaused == true,
                     )
                 }
                 .distinctUntilChanged()
@@ -212,6 +231,8 @@ class HushPlaybackService : MediaSessionService() {
         val isPlaying: Boolean,
         val title: String,
         val timerMinutes: Int?,
+        /** The subtitle says so, and freezing need not change the minutes. */
+        val timerPaused: Boolean,
     )
 
     private companion object {

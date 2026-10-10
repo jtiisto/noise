@@ -32,6 +32,11 @@ data class TimerState(
     val endAtEpochMillis: Long,
     val remainingMillis: Long,
     val fadeMillis: Long,
+    /**
+     * Frozen by a user pause: nothing ticks, [remainingMillis] is held and
+     * [endAtEpochMillis] is 0 until `play()` re-arms it for that remaining time.
+     */
+    val isPaused: Boolean = false,
 ) {
     val isFading: Boolean get() = remainingMillis <= fadeMillis
     val progress: Float get() = if (totalMillis <= 0) 0f else (1f - remainingMillis.toFloat() / totalMillis).coerceIn(0f, 1f)

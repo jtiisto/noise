@@ -44,8 +44,9 @@
    percentage; tap → the **volume popover** (6). The pill always states the current mode rather than
    naming a screen, so "no timer" reads as a deliberate choice and not an
    absence: a crescent moon plus `27:31`, accent-tinted, while a timer runs;
-   an infinity glyph plus "No timer", quiet, while none does. Tap → timer
-   sheet either way.
+   an infinity glyph plus "No timer", quiet, while none does; a timer frozen
+   by a pause keeps its (still) countdown and its description says "paused".
+   Tap → timer sheet either way.
 2. **Orb** — centred 168 dp circular play/pause control with layered rings
    (three concentric translucent circles tinted by the mix hue; outer ring
    pulses while playing). It is drawn inside a 200 dp box so the halo behind

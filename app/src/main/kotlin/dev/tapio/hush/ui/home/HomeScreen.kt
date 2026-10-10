@@ -499,7 +499,8 @@ private fun TimerPill(timer: TimerState?, accent: Color, onClick: () -> Unit) {
     val running = timer != null
     val context = LocalContext.current
     val description = if (timer != null) {
-        context.getString(R.string.cd_timer_running, remainingMinutes(timer.remainingMillis))
+        val template = if (timer.isPaused) R.string.cd_timer_paused else R.string.cd_timer_running
+        context.getString(template, remainingMinutes(timer.remainingMillis))
     } else {
         stringResource(R.string.cd_timer_none)
     }

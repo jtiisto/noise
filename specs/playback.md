@@ -60,7 +60,8 @@ interface PlaybackController {
   otherwise the controller would be deaf for the rest of the session.
   - `AudioEngine` (core/audio).
   - `StateStore` — persists `PersistedState(mix, masterVolume, settings,
-    wasPlaying, timerEndAtEpochMillis, timerTotalMillis)`; `DataStoreStateStore`
+    wasPlaying, timerEndAtEpochMillis, timerTotalMillis,
+    timerPausedRemainingMillis)`; `DataStoreStateStore`
     (Preferences DataStore, file `hush.preferences_pb`) is the real one.
   - `AudioFocusGate` — `request(): Boolean`, `abandon()`, and a callback flow of
     `FocusEvent { LOSS, LOSS_TRANSIENT, DUCK, GAIN }`. `AndroidAudioFocusGate`
@@ -105,10 +106,22 @@ interface PlaybackController {
     which time the user may have restarted or cancelled the timer; a
     completion whose generation no longer matches is dropped, so a stale fade
     can never pause playback the user just restarted.
-  - Only a *user* pause cancels the timer. A pause forced on us (focus loss,
-    becoming-noisy) leaves the wall-clock timer running, since the user did
-    not change their mind about when the sound should end; if it runs out
-    while we are paused the tick completes it (no engine callback is coming).
+  - A *user* pause **freezes** the timer where it stands (there is no stop
+    button, so pause is the only way to interrupt a night): the tick loop and
+    any fade are torn down, and the timer stays in state with
+    `isPaused = true`, `endAtEpochMillis = 0` and its remaining time held —
+    the pill keeps showing it. `play()` re-arms it for exactly that remaining
+    time (`endAt = now + remaining`), fading from the start if that is inside
+    the fade window. `startTimer` replaces a frozen timer with a full fresh
+    one (also when the same length is chosen again) and `cancelTimer` clears
+    it, exactly as for a running one. Emptying the mix cancels it instead of
+    freezing it: there is nothing left for it to stop. Turning *Mix with other
+    apps* off while playing and being refused focus pauses through the same
+    user path, so it freezes too. A pause forced on us
+    (focus loss, becoming-noisy) leaves the wall-clock timer running, since
+    the user did not change their mind about when the sound should end; if it
+    runs out while we are paused the tick completes it (no engine callback is
+    coming).
     Resuming inside the fade window re-issues `beginFadeOut` for the time
     that is left.
   - Every state change is persisted (debounced 300 ms) via `StateStore`.
@@ -118,7 +131,11 @@ interface PlaybackController {
     `wasPlaying` and the mix is non-empty, call `play()`; if a timer end time
     lies in the future, re-arm it with the remaining time; if it is in the
     past, treat as expired — stay paused (playback *would* have stopped while
-    the process was dead), clear the timer and flush the cleared state.
+    the process was dead), clear the timer and flush the cleared state. A
+    timer frozen by a user pause (`timerPausedRemainingMillis > 0`) comes
+    back frozen and is never armed by restore — it also wins over a stale
+    `wasPlaying`, and a positive `timer_end_at` wins over it; the next
+    `play()` resumes it.
 - `HushPlaybackService : MediaSessionService` — builds a `MediaSession`
   around `HushPlayer : SimpleBasePlayer`, which mirrors controller state:
   one `MediaItem` whose metadata is the mix title (`Mix.title()`) and subtitle
@@ -130,7 +147,15 @@ interface PlaybackController {
   volume and seeking off. `handleSetPlayWhenReady(true)` → `controller.play()`,
   false → `controller.pause()`, `handleStop()` → `controller.pause()` then
   stop self. `onTaskRemoved` keeps playing if playing, otherwise stops.
-  `START_STICKY`. The service stops itself after 60 s of `isPlaying=false`.
+  `START_STICKY`. The service stops itself after 60 s of `isPlaying=false`;
+  releasing the player on that teardown pauses only if still playing, so a
+  forced pause's wall-clock timer and `resumeOnGain` survive it. Every start
+  command promotes to the foreground with the notification already posted
+  under our id (Media3's rich one once it exists; a placeholder only before
+  Media3's controller has connected), because Media3 promotes by starting the
+  service with a self-intent and *then* posting — a placeholder posted on
+  that self-intent overwrote the rich notification (field bug #3). A frozen
+  timer's subtitle reads "Sleep timer paused · N min".
   Notification is Media3's default provider (`DefaultMediaNotificationProvider`)
   on channel `hush_playback`; the service creates that channel itself in
   `onCreate` so it carries a description (Media3 only creates a channel that

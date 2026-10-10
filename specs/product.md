@@ -42,7 +42,9 @@ Up to **3 sounds** play at once, each with its own volume. Curated **scenes**
    screen off, app swipe-away keeps playing; notification/stop ends it.
 3. **Sleep timer** — 15/30/45/60/90/120 min presets + custom (5–480 min),
    live countdown, gentle fade-out over a configurable window (default 45 s),
-   then playback stops and the service exits.
+   then playback stops and the service exits. Pause freezes the countdown and
+   play resumes it; starting a timer from the sheet always restarts it from
+   the full length, even for the same chip.
 4. **Fades** — fade-in on play (1.5 s), fade-out on pause (0.6 s), layers
    crossfade when added/removed, all volume changes smoothed (no zipper noise).
 5. **Audio focus** — pause on loss, duck on transient duck, resume after

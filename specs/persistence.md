@@ -13,6 +13,7 @@ a pure mapping):
 | `was_playing` | Boolean | resume after process death |
 | `timer_end_at` | Long | epoch ms; 0 = none |
 | `timer_total_ms` | Long | for progress; 0 = none |
+| `timer_paused_remaining_ms` | Long | remaining time of a timer frozen by a user pause; 0 = none (then `timer_end_at` rules) |
 
 `PersistedState` ⇄ `Preferences` mapping is pure (`PersistedStateCodec`), unit
 tested for round-trips, unknown sound ids (dropped), malformed entries
@@ -31,7 +32,7 @@ app start where nothing could handle the failure. Specifically:
   falls back to the default.
 - `fade_out_seconds` is clamped to the range of `FADE_OPTIONS_SECONDS`
   (15..120), `last_timer_minutes` to `TIMER_MIN_MINUTES..TIMER_MAX_MINUTES`
-  (5..480), and both timer millisecond fields to `>= 0`.
+  (5..480), and the three timer millisecond fields to `>= 0`.
 - A key holding the wrong value type is treated as absent rather than
   throwing a `ClassCastException`.
 - A corrupt DataStore file is replaced with an empty one

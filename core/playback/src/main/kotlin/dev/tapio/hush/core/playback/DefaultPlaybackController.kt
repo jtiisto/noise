@@ -127,7 +127,7 @@ class DefaultPlaybackController(
 
     override fun clearMix() = dispatch {
         _state.update { it.copy(mix = Mix.EMPTY) }
-        pauseByUser()
+        pauseByUser(keepTimer = false)
     }
 
     override fun setMasterVolume(volume: Float) = dispatch {
@@ -235,25 +235,56 @@ class DefaultPlaybackController(
         wakeLock.acquire()
         _state.update { it.copy(isPlaying = true) }
 
-        // Resuming inside the fade window (e.g. after a phone call) has to
-        // re-issue the fade or the mix would jump back to full volume and then
-        // cut out abruptly when the timer completes.
-        val timer = _state.value.timer
-        if (fadeStarted && timer != null) {
-            val generation = fadeGeneration
-            engine.beginFadeOut(timer.remainingMillis) { onEngineFadeComplete(generation) }
+        val frozen = current.timer
+        if (frozen != null && frozen.isPaused) {
+            // A timer frozen by a user pause resumes for exactly the time it
+            // had left. Re-arming starts its fade itself when that time is
+            // already inside the fade window.
+            armTimer(totalMillis = frozen.totalMillis, endAtEpochMillis = clock.now() + frozen.remainingMillis)
+        } else {
+            // Resuming inside the fade window (e.g. after a phone call) has to
+            // re-issue the fade or the mix would jump back to full volume and
+            // then cut out abruptly when the timer completes.
+            val timer = _state.value.timer
+            if (fadeStarted && timer != null) {
+                val generation = fadeGeneration
+                engine.beginFadeOut(timer.remainingMillis) { onEngineFadeComplete(generation) }
+            }
         }
 
         schedulePersist()
         return true
     }
 
-    /** A user-initiated pause: cancels the sleep timer and never resumes by itself. */
-    private fun pauseByUser() {
+    /**
+     * A user-initiated pause: freezes the sleep timer where it stands and
+     * never resumes by itself. [keepTimer] is false when the mix was just
+     * emptied — there is nothing left for a timer to stop, so it is cancelled.
+     */
+    private fun pauseByUser(keepTimer: Boolean = true) {
         resumeOnGain = false
-        stopTimer(cancelFade = true)
+        if (keepTimer) freezeTimer() else stopTimer(cancelFade = true)
         pauseInternal(abandonFocus = true)
         persistNow()
+    }
+
+    /**
+     * Tears the tick loop and any fade down but keeps the timer, remaining
+     * time held, so the next play can re-arm it. Done in place rather than
+     * through [stopTimer] so observers never see the timer vanish and return.
+     */
+    private fun freezeTimer() {
+        val timer = _state.value.timer ?: return
+        if (timer.isPaused) return
+        val remaining = (timer.endAtEpochMillis - clock.now()).coerceAtLeast(0L)
+        fadeGeneration++
+        timerJob?.cancel()
+        timerJob = null
+        if (fadeStarted && _state.value.isPlaying) engine.cancelFadeOut()
+        fadeStarted = false
+        _state.update {
+            it.copy(timer = timer.copy(endAtEpochMillis = 0L, remainingMillis = remaining, isPaused = true))
+        }
     }
 
     private fun pauseInternal(abandonFocus: Boolean) {
@@ -278,8 +309,9 @@ class DefaultPlaybackController(
     private fun applyMix(mix: Mix) {
         _state.update { it.copy(mix = mix) }
         if (mix.isEmpty) {
-            // Nothing left to play; pausing also drops the foreground service.
-            pauseByUser()
+            // Nothing left to play; pausing also drops the foreground service,
+            // and a timer has nothing left to stop.
+            pauseByUser(keepTimer = false)
             return
         }
         if (_state.value.isPlaying) engine.setMix(mix)
@@ -429,12 +461,31 @@ class DefaultPlaybackController(
                         settings = persisted.settings,
                     )
                 }
+                val frozenRemaining = persisted.timerPausedRemainingMillis
+                if (!hasTimer && frozenRemaining > 0L && persisted.timerTotalMillis > 0L) {
+                    // A timer frozen by a user pause comes back frozen; set
+                    // before any resume so that a resume would re-arm it.
+                    _state.update {
+                        it.copy(
+                            timer = TimerState(
+                                totalMillis = persisted.timerTotalMillis,
+                                endAtEpochMillis = 0L,
+                                remainingMillis = frozenRemaining,
+                                fadeMillis = it.settings.fadeOutSeconds * MILLIS_PER_SECOND,
+                                isPaused = true,
+                            ),
+                        )
+                    }
+                }
                 // An expired timer means playback *should* already have stopped
                 // while we were dead: come back paused, not blaring at 4am.
                 // The service goes up before the focus request, and one retry
                 // covers the case where the system had not finished promoting it
                 // yet (restore reads disk in parallel with onStartCommand).
-                if (persisted.wasPlaying && !persisted.mix.isEmpty && !timerExpired) {
+                // A frozen timer means the user paused; it wins over a stale
+                // wasPlaying, which no normal snapshot pairs with it anyway.
+                val frozen = _state.value.timer?.isPaused == true
+                if (persisted.wasPlaying && !persisted.mix.isEmpty && !timerExpired && !frozen) {
                     if (!startPlayback(startServiceFirst = true)) scheduleRestoreRetry()
                 }
                 if (hasTimer && !timerExpired) {
@@ -490,8 +541,9 @@ class DefaultPlaybackController(
             masterVolume = current.masterVolume,
             settings = current.settings,
             wasPlaying = current.isPlaying,
-            timerEndAtEpochMillis = current.timer?.endAtEpochMillis ?: 0L,
+            timerEndAtEpochMillis = current.timer?.takeUnless { it.isPaused }?.endAtEpochMillis ?: 0L,
             timerTotalMillis = current.timer?.totalMillis ?: 0L,
+            timerPausedRemainingMillis = current.timer?.takeIf { it.isPaused }?.remainingMillis ?: 0L,
         )
     }
 

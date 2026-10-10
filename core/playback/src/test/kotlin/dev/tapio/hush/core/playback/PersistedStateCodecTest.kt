@@ -170,4 +170,16 @@ class PersistedStateCodecTest {
         assertEquals("timer_end_at", PersistedStateCodec.TIMER_END_AT.name)
         assertEquals("timer_total_ms", PersistedStateCodec.TIMER_TOTAL_MS.name)
     }
+
+    @Test
+    fun `a frozen timer's remaining time round-trips and never decodes negative`() {
+        val state = PersistedState(timerTotalMillis = 1_800_000L, timerPausedRemainingMillis = 1_200_000L)
+        assertEquals(state, roundTrip(state))
+
+        val preferences = mutablePreferencesOf()
+        PersistedStateCodec.encode(state, preferences)
+        preferences[PersistedStateCodec.TIMER_PAUSED_REMAINING_MS] = -5L
+        assertEquals(0L, PersistedStateCodec.decode(preferences).timerPausedRemainingMillis)
+    }
 }
+
