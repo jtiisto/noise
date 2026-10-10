@@ -93,7 +93,10 @@ build had ever been run on a device — see docs/reviews.md).
 - Drive the UI over ADB with uiautomator dumps (tap by content-desc); read
   crashes with `adb logcat -b crash`. Smoke path: launch, add a sound, play,
   allow notifications, add a third sound, confirm `isForeground=true` and no
-  FATAL, swipe away and reopen, start a short timer and let it fade out.
+  FATAL, switch to another scene and read the notification's title back
+  (`dumpsys notification --noredact` → `android.title`; it must follow —
+  field bug #2 in docs/reviews.md), swipe away and reopen, start a short
+  timer and let it fade out.
   After the fade the engine stops at once (wake lock gone, session not
   playing) but the service retires itself only after a 60 s idle grace
   (`IDLE_STOP_MILLIS`) — check `dumpsys activity services` after that.
