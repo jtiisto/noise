@@ -138,6 +138,15 @@ interface PlaybackController {
   `core/playback/src/main/res/values/strings.xml`. The service module is
   device glue: excluded from coverage, kept minimal, every decision lives in
   the controller.
+- The service **adds its own session** (`addSession` in `onCreate`). Media3
+  attaches its notification manager to a session only once it is added, and
+  it normally does that when a Media3 controller binds and `onGetSession`
+  answers — nothing in Hush ever binds (the UI holds the `PlaybackController`,
+  the system uses the platform session). Without the call the manager never
+  connects, no player event reaches it, and the notification stays the
+  bootstrap placeholder with its title frozen at the first play (field bug
+  2026-10-10). With it, Media3 replaces the placeholder in place and keeps the
+  title, the timer subtitle and the play state current.
 - Manifest: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`,
   `POST_NOTIFICATIONS`, `WAKE_LOCK` in the **app** manifest; the service is
   declared in the **library** manifest (`core/playback/src/main/`) with

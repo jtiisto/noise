@@ -246,3 +246,25 @@ the anchor is the inset header itself, no double-counted status bar; zero cost
 while closed; inset spacers and snackbar padding are independent. Verified on
 the emulator in both orientations: open, drag, outside-tap close, Back close.
 
+## 2026-10-10 — Field bug #2: the notification's title never updated (fixed in 0.2.2)
+
+Reported on the Pixel: after playing the Cabin scene and switching to Deep
+focus, the media notification kept saying "Campfire + Wind + Rain".
+Reproduced on the emulator with the system's own counters: a scene switch
+moved the platform session's metadata but the app never re-posted the
+notification (`numEnqueuedByApp` unchanged); only Play did.
+
+Instrumenting the service showed `HushPlayer` emitting `EVENT_TIMELINE_CHANGED`
+and `EVENT_MEDIA_METADATA_CHANGED` on every switch while Media3 never called
+`onUpdateNotification`. Media3 attaches its notification manager to a session
+only once the session is *added* to the `MediaSessionService`, which normally
+happens when a Media3 controller binds and `onGetSession` answers — and nothing
+in Hush ever binds: the UI holds the `PlaybackController` and the system uses the
+platform session. So Media3's notification machinery was inert from the first
+release; the notification users saw was the bootstrap placeholder from
+`promoteToForeground()`, posted once at start (its title frozen there) and
+replaced only by the next bootstrap on a later start. **Fix:** `addSession(session)`
+in `onCreate`. Verified on the emulator: the notification follows Cabin → Deep
+focus → Seaside, updates on pause/play, the service stays foreground while
+playing, the 60 s idle exit still removes it.
+

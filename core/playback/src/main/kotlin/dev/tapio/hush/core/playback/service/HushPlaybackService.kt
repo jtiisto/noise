@@ -58,10 +58,23 @@ class HushPlaybackService : MediaSessionService() {
             onStopRequested = { stopSelf() },
             looper = mainLooper,
         )
-        mediaSession = MediaSession.Builder(this, player)
+        val session = MediaSession.Builder(this, player)
             .setId(SESSION_ID)
             .apply { sessionActivityIntent()?.let { setSessionActivity(it) } }
             .build()
+        mediaSession = session
+        // Media3 only attaches its notification manager to a session once the
+        // session is *added* to the service, which normally happens when a
+        // Media3 controller binds and onGetSession() answers. Nothing in Hush
+        // ever binds — the UI talks to the PlaybackController directly and the
+        // system uses the platform session — so without this call the manager
+        // never connects, no player event ever reaches it, and the notification
+        // stays the bootstrap placeholder below forever (its title frozen at
+        // the first play; field bug 2026-10-10). Added here, it posts the rich
+        // notification, keeps the title and timer current, and handles the
+        // foreground state on play and pause. Released sessions are removed
+        // automatically.
+        addSession(session)
 
         observeController(player)
     }
@@ -75,9 +88,10 @@ class HushPlaybackService : MediaSessionService() {
         // POST_NOTIFICATIONS dialog delays that past the deadline — the system
         // then kills the process with ForegroundServiceDidNotStartInTime.
         // Promote immediately with a placeholder on the same channel and id
-        // Media3 uses; Media3 replaces this notification the moment the session
-        // is ready. Never let this throw: a background-start refusal is handled
-        // by falling back to Media3's own lifecycle.
+        // Media3 uses; Media3's notification manager (attached by addSession in
+        // onCreate) replaces it in place as soon as its controller connects.
+        // Never let this throw: a background-start refusal is handled by
+        // falling back to Media3's own lifecycle.
         promoteToForeground()
         super.onStartCommand(intent, flags, startId)
         // START_STICKY so a process killed mid-playback is recreated; the
